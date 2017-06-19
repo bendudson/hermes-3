@@ -95,7 +95,9 @@ private:
   bool j_diamag;    // Diamagnetic current: Vort <-> Pe
   bool j_par;       // Parallel current:    Vort <-> Psi
   bool parallel_flow;
+  bool parallel_flow_p_term; // Vi advection terms in Pe, Pi
   bool pe_par;      // Parallel pressure gradient: Pe <-> Psi
+  bool pe_par_p_term; // Includes terms in Pe,Pi equations
   bool resistivity; // Resistivity: Psi -> Pe
   bool thermal_force; // Force due to temperature gradients
   bool electron_viscosity; // Electron parallel viscosity
@@ -104,13 +106,15 @@ private:
   bool poloidal_flows;  // Include y derivatives in diamagnetic and ExB drifts
   bool thermal_flux;    // Include parallel and perpendicular energy flux from Te gradients
   bool thermal_conduction; // Braginskii electron heat conduction
-  
+  bool electron_ion_transfer; // Electron-ion heat transfer
   bool classical_diffusion; // Collisional diffusion, including viscosity
   
   // Anomalous perpendicular diffusion coefficients
   BoutReal anomalous_D;    // Density diffusion
   BoutReal anomalous_chi;  // Electron thermal diffusion
   BoutReal anomalous_nu;   // Momentum diffusion (kinematic viscosity)
+
+  bool anomalous_D_all_terms; // Include terms in momentum and energy equations
 
   bool ion_velocity;  // Include Vi terms
 
@@ -134,6 +138,7 @@ private:
   BoutReal sheath_gamma_e, sheath_gamma_i;  // Heat transmission
   BoutReal neutral_vwall; // Scale velocity at the wall
   bool sheath_yup, sheath_ydown; 
+  bool test_boundaries;
 
   Field2D wall_flux; // Particle flux to wall (diagnostic)
   Field2D wall_power; // Power flux to wall (diagnostic)
@@ -158,7 +163,8 @@ private:
   BoutReal z_hyper_viscos, x_hyper_viscos, y_hyper_viscos; // 4th-order derivatives
   bool low_n_diffuse; // Diffusion at low density
   BoutReal ne_hyper_z, pe_hyper_z; // Hyper-diffusion
-  
+  BoutReal scale_num_cs; // Scale numerical sound speed
+
   // Sources and profiles
   
   bool ramp_mesh;   // Use Ne,Pe in the grid file for starting ramp target

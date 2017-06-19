@@ -21,7 +21,7 @@ NeutralModel* NeutralModel::create(Solver *solver, Mesh *mesh, Options *options)
   
   if(type == "none") {
     // Neutral model which does nothing
-    return new NeutralNone(solver, mesh, options);
+    return NULL; //new NeutralNone(solver, mesh, options);
   }else if(type == "diffusion2d") {
     // Diffusion in X-Z only
     return new Diffusion2D(solver, mesh, options);

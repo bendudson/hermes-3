@@ -733,13 +733,25 @@ void Fromm(Stencil1D &n, const BoutReal h) {
   n.R = n.c + 0.25*(n.p - n.m);
 }
 
+/// The minmod function returns the value with the minimum magnitude
+/// If the inputs have different signs then returns zero
 BoutReal minmod(BoutReal a, BoutReal b) {
-  if( a*b <= 0.0 )
+  if ( a*b <= 0.0 )
     return 0.0;
   
-  if(fabs(a) < fabs(b))
+  if (fabs(a) < fabs(b))
     return a;
   return b;
+}
+
+BoutReal minmod(BoutReal a, BoutReal b, BoutReal c) {
+  // If any of the signs are different, return zero gradient
+  if ( (a*b <= 0.0) || (a*c <= 0.0) ) {
+    return 0.0;
+  }
+  
+  // Return the minimum absolute value
+  return SIGN(a) * BOUTMIN(fabs(a), fabs(b), fabs(c));
 }
 
 void MinMod(Stencil1D &n, const BoutReal h) {
@@ -748,6 +760,13 @@ void MinMod(Stencil1D &n, const BoutReal h) {
   BoutReal slope = minmod(n.p - n.c, n.c - n.m);
   n.L = n.c - 0.5*slope; //0.25*(n.p - n.m);
   n.R = n.c + 0.5*slope; //0.25*(n.p - n.m);
+}
+
+// Monotonized Central limiter (Van-Leer)
+void MC(Stencil1D &n, const BoutReal h) {
+  BoutReal slope = minmod(2.*(n.p - n.c), 0.5*(n.p - n.m), 2.*(n.c - n.m));
+  n.L = n.c - 0.5*slope;
+  n.R = n.c + 0.5*slope;
 }
 
 void XPPM(Stencil1D &n, const BoutReal h) {
@@ -1491,11 +1510,23 @@ const Field3D Div_Perp_Lap_FV(const Field3D &a, const Field3D &f, bool xflux) {
         result(i,j,k)   += flux / (mesh->dx(i,j)*mesh->J(i,j));
         //result(i+1,j,k) -= flux / (mesh->dx(i+1,j)*mesh->J(i+1,j));
         
+        /*
+        if (i == mesh->xend) {
+          output.write("%d: (%e, %e), (%e, %e), %e, %e\n", j, fs(i+1,j,k), fs(i,j,k), as(i+1,j,k), as(i,j,k), gR, flux);
+        }
+        */
+
         // Flow left
         flux = gL * 0.25*(mesh->J(i-1,j) + mesh->J(i,j)) *(as(i-1,j,k) + as(i,j,k));
         
         result(i,j,k)   -= flux / (mesh->dx(i,j)*mesh->J(i,j));
         //result(i-1,j,k) += flux / (mesh->dx(i+1,j)*mesh->J(i+1,j));
+        
+        /*
+        if (i == mesh->xstart) {
+          output.write("%d: (%e, %e), (%e, %e), %e, %e\n", j, fs(i-1,j,k), fs(i,j,k), as(i-1,j,k), as(i,j,k), gL, flux);
+        }
+        */
         
         
         // Flow up
@@ -1614,10 +1645,23 @@ const Field3D Div_par_FV_FS(const Field3D &f, const Field3D &v, const Field3D &a
   Field3D result = 0.0;
 
   // Calculate in guard cells
-  int ys = mesh->ystart-1;
-  int ye = mesh->yend+1;
+  int ys;
+  int ye;
   
-  for(int i=mesh->xstart;i<=mesh->xend;i++)
+  for(int i=mesh->xstart;i<=mesh->xend;i++) {
+    
+    if (!mesh->firstY(i) || mesh->periodicY(i)) {
+      ys = mesh->ystart-1;
+    } else {
+      ys = mesh->ystart;
+    }
+    
+    if (!mesh->lastY(i) || mesh->periodicY(i)) {
+      ye = mesh->yend+1;
+    } else {
+      ye = mesh->yend;
+    }
+    
     for(int j=ys;j<=ye;j++) {
       for(int k=0;k<mesh->ngz-1;k++) {
         
@@ -1631,27 +1675,33 @@ const Field3D Div_par_FV_FS(const Field3D &f, const Field3D &v, const Field3D &a
         
         //Upwind(s, mesh->dy(i,j));  // 1st order accurate
         //Fromm(s, mesh->dy(i,j));     // 2nd order, some upwinding
-        MinMod(s, mesh->dy(i,j));  // Slope limiter
-        
+        //MinMod(s, mesh->dy(i,j));  // Slope limiter
+        MC(s, mesh->dy(i,j)); // MC slope limiter
+
         // Calculate velocity at right boundary (y+1/2)
         BoutReal vpar = 0.5*(v(i,j,k) + v(i,j+1,k));
-        
-        // Maximum wave speed in the two cells
-        BoutReal amax = BOUTMAX(a(i,j,k), a(i,j+1,k));
-        
         BoutReal flux;
         
-        if(vpar > amax) {
-          // Supersonic flow out of this cell
+        if (mesh->lastY(i) && (j == mesh->yend) && !mesh->periodicY(i)) {
+          // Last point in domain: Use mid-point to be consistent with boundary conditions
+          s.R = 0.5*(s.c + s.p);
           flux = s.R * vpar;
-        }else if(vpar < -amax) {
-          // Supersonic flow into this cell
-          flux = 0.0;
-        }else {
-          // Subsonic flow, so a mix of right and left fluxes
-          flux = s.R * 0.5*(vpar + amax);
+        } else {
+          
+          // Maximum wave speed in the two cells
+          BoutReal amax = BOUTMAX(a(i,j,k), a(i,j+1,k));
+          
+          if(vpar > amax) {
+            // Supersonic flow out of this cell
+            flux = s.R * vpar;
+          }else if(vpar < -amax) {
+            // Supersonic flow into this cell
+            flux = 0.0;
+          }else {
+            // Subsonic flow, so a mix of right and left fluxes
+            flux = s.R * 0.5*(vpar + amax);
+          }
         }
-        
         flux *= (mesh->J(i,j) + mesh->J(i,j+1)) / (sqrt(mesh->g_22(i,j))+ sqrt(mesh->g_22(i,j+1)));
 
         result(i,j,k)   += flux / (mesh->dy(i,j)*mesh->J(i,j));
@@ -1660,19 +1710,25 @@ const Field3D Div_par_FV_FS(const Field3D &f, const Field3D &v, const Field3D &a
         // Calculate at left boundary
         vpar = 0.5*(v(i,j,k) + v(i,j-1,k));
         
-        // Maximum wave speed in the two cells
-        amax = BOUTMAX(a(i,j,k), a(i,j-1,k));
+        if (mesh->firstY(i) && (j == mesh->ystart) && !mesh->periodicY(i)) {
+          // First point in domain
+          s.L = 0.5*(s.c + s.m);
+          flux = s.L*vpar;
+        } else {
+
+          // Maximum wave speed in the two cells
+          BoutReal amax = BOUTMAX(a(i,j,k), a(i,j-1,k));
         
-        if(vpar < -amax) {
-          // Supersonic out of this cell
-          flux = s.L * vpar;
-        }else if(vpar > amax) {
-          // Supersonic into this cell
-          flux = 0.0;
-        }else {
-          flux = s.L * 0.5*(vpar - amax);
+          if(vpar < -amax) {
+            // Supersonic out of this cell
+            flux = s.L * vpar;
+          }else if(vpar > amax) {
+            // Supersonic into this cell
+            flux = 0.0;
+          }else {
+            flux = s.L * 0.5*(vpar - amax);
+          }
         }
-        
         flux *= (mesh->J(i,j) + mesh->J(i,j-1)) / (sqrt(mesh->g_22(i,j)) + sqrt(mesh->g_22(i,j-1)));
           
         result(i,j,k)   -= flux / (mesh->dy(i,j)*mesh->J(i,j));
@@ -1681,6 +1737,7 @@ const Field3D Div_par_FV_FS(const Field3D &f, const Field3D &v, const Field3D &a
       }
       
     }
+  }
   return result;
 }
 
