@@ -1219,8 +1219,9 @@ const Field3D Div_f_v_XPPM(const Field3D &n_in, const Vector3D &v, bool bndry_fl
         //Upwind(s, mesh->dx(i,j)); // 1st order accurate
 	//XPPM(s, mesh->dx(i,j)); 
 	//Fromm(s, mesh->dx(i,j)); // 2nd order, some upwinding
-        MinMod(s, mesh->dx(i,j));  // Slope limiter
-
+        //MinMod(s, mesh->dx(i,j));  // Slope limiter
+        MC(s, mesh->dx(i,j));  // Monotonized Central
+        
         if (positive) {
           if (s.R < 0.0) {
             s.R = 0.0;
@@ -1255,8 +1256,6 @@ const Field3D Div_f_v_XPPM(const Field3D &n_in, const Vector3D &v, bool bndry_fl
             BoutReal flux = JR * vR * s.R;
             result(i,j,k)   += flux / (mesh->dx(i,j) * mesh->J(i,j));
             result(i+1,j,k) -= flux / (mesh->dx(i+1,j) * mesh->J(i+1,j));
-            //if(i==mesh->xend)
-            //  output.write("Setting flux (%d,%d) : %e\n", j,k,result(i+1,j,k));
           }
 	}
         
@@ -1510,23 +1509,11 @@ const Field3D Div_Perp_Lap_FV(const Field3D &a, const Field3D &f, bool xflux) {
         result(i,j,k)   += flux / (mesh->dx(i,j)*mesh->J(i,j));
         //result(i+1,j,k) -= flux / (mesh->dx(i+1,j)*mesh->J(i+1,j));
         
-        /*
-        if (i == mesh->xend) {
-          output.write("%d: (%e, %e), (%e, %e), %e, %e\n", j, fs(i+1,j,k), fs(i,j,k), as(i+1,j,k), as(i,j,k), gR, flux);
-        }
-        */
-
         // Flow left
         flux = gL * 0.25*(mesh->J(i-1,j) + mesh->J(i,j)) *(as(i-1,j,k) + as(i,j,k));
         
         result(i,j,k)   -= flux / (mesh->dx(i,j)*mesh->J(i,j));
         //result(i-1,j,k) += flux / (mesh->dx(i+1,j)*mesh->J(i+1,j));
-        
-        /*
-        if (i == mesh->xstart) {
-          output.write("%d: (%e, %e), (%e, %e), %e, %e\n", j, fs(i-1,j,k), fs(i,j,k), as(i-1,j,k), as(i,j,k), gL, flux);
-        }
-        */
         
         
         // Flow up
