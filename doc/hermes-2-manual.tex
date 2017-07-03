@@ -110,7 +110,7 @@ The electron pressure equation is:
   % Electron pressure
   %
   \frac{3}{2}\deriv{p_e}{t} &=& -\nabla\cdot\left(\frac{3}{2}p_e\mathbf{V}_{E\times B} + p_e\frac{5}{2}\mathbf{V}_{mag,e}\right) - p_e\nabla\cdot\mathbf{V}_{E\times B}\\
-  &&  - \nabla\cdot\left(\frac{5}{2}p_e v_{||e}\right)+ v_{||e}\partial_{||}p_e \\
+  &&  - \nabla\cdot\left(\frac{3}{2}p_e v_{||e}\right) - p_e\nabla_{||}v_{||e} \\
   && + \nabla_{||}\left(\kappa_{e||}\partial_{||}T_e\right)  \\
   && + 0.71\nabla_{||}\left(T_e j_{||}\right) - 0.71 j_{||}\partial_{||} T_e + \frac{\nu}{n}j_{||}^2 \\
   && + \nabla\cdot\left(\frac{\rho_e^2}{\tau_e}\left[\nabla_\perp p_e + \nabla_\perp p_i + \frac{11}{12}n\nabla_\perp T_e\right]\right) \\
@@ -137,7 +137,7 @@ The ion pressure equation is:
 % Ion pressure
 %
 \frac{3}{2}\frac{\partial p_i}{\partial t} &=& -\nabla\cdot\left(\frac{3}{2}p_i\mathbf{V}_{E\times B} + \frac{5}{2}p_i\mathbf{V}_{mag,i}\right) - p_i\nabla\cdot\mathbf{V}_{E\times B} \\
-&& -\nabla\cdot\left(\frac{5}{2}p_i\mathbf{b}v_{||i}\right) + v_{||i}\partial_{||}p_i \\
+&& -\nabla\cdot\left(\frac{3}{2}p_i\mathbf{b}v_{||i}\right)  - p_i\nabla_{||}v_{||i} \\
 && -\frac{j_{||}}{n_0}\partial_{||}p_i + \frac{p_i}{n_0}\nabla\cdot\left[\left(p_e + p_i\right)\nabla\times\frac{\mathbf{b}}{B}\right]  \\
 && + v_{||i}\frac{2}{3}B^{3/2}\partial_{||}\left(\frac{\pi_{ci}}{B^{3/2}}\right) \\
 && + \nabla_{||}\left(\kappa_{i||}\partial_{||}T_i\right) + \nabla\cdot\left(\kappa_{i\perp}\nabla_\perp T_i\right) \\
