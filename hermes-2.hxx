@@ -176,7 +176,11 @@ private:
   bool energy_source; // Add the same amount of energy to each particle
   BoutReal source_p, source_i;  // Proportional-Integral controller
   Field2D Sn, Spe, Spi; // Sources in density, Pe and Pi
+  Field2D NeSource, PeSource, PiSource; // Actual sources added
   bool density_inflow;  // Does incoming density have momentum?
+  
+  bool source_vary_g11; // Multiply source by g11
+  Field2D g11norm;
   
   // Boundary fluxes
   

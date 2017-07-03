@@ -488,7 +488,17 @@ int Hermes::init(bool restarting) {
     
     mesh->communicate(Ne, Pe);
   }
-  
+
+  /////////////////////////////////////////////////////////
+  // Sources (after metric)
+
+  // Multiply sources by g11 
+  OPTION(optsc, source_vary_g11, false);
+  if (source_vary_g11) {
+    // Average metric tensor component
+    g11norm = mesh->g11 / averageY(mesh->g11);
+  }
+
   /////////////////////////////////////////////////////////
   // Read curvature components
   TRACE("Reading curvature");
@@ -567,7 +577,8 @@ int Hermes::init(bool restarting) {
   kappa_epar = 0.0;
   Dn = 0.0;
   
-  SAVE_REPEAT(Telim);
+  SAVE_REPEAT2(Telim, Tilim);
+  
   if (verbose) {
     // Save additional fields
     SAVE_REPEAT(Jpar);        // Parallel current
@@ -584,6 +595,10 @@ int Hermes::init(bool restarting) {
       // Ion parallel stress tensor
       SAVE_REPEAT(Pi_ci);
     }
+    
+    // Sources added to Ne, Pe and Pi equations
+    SAVE_REPEAT3(NeSource, PeSource, PiSource);
+    NeSource = PeSource = PiSource = 0.0;
   }
   
   psi = phi = 0.0;
@@ -1738,7 +1753,6 @@ int Hermes::rhs(BoutReal t) {
   }
   
   // Source
-  Field3D NeSource;
   if (adapt_source) {
     // Add source. Ensure that sink will go to zero as Ne -> 0
     Field2D NeErr = averageY(Ne.DC() - NeTarget);
@@ -1775,6 +1789,11 @@ int Hermes::rhs(BoutReal t) {
   } else {
     NeSource = Sn*where(Sn, 1.0, Ne);
   }
+  
+  if (source_vary_g11) {
+    NeSource *= g11norm;
+  }
+
   ddt(Ne) += NeSource;
 
   if (ExBdiff > 0.0) {
@@ -2094,7 +2113,8 @@ int Hermes::rhs(BoutReal t) {
   
   if (parallel_flow_p_term) {
     //ddt(Pe) -= Div_parP_LtoC(Pe,Ve);  // Parallel flow
-    ddt(Pe) -= Div_par_FV_FS(Pe, Ve, sqrt(mi_me)*sound_speed);
+    //ddt(Pe) -= Div_par_FV_FS(Pe, Ve, sqrt(mi_me)*sound_speed);
+    ddt(Pe) -= Div_par_FV_FS(Pe, Ve, sound_speed);
   }
   
   if (j_diamag) { // Diamagnetic flow
@@ -2242,17 +2262,17 @@ int Hermes::rhs(BoutReal t) {
       // Sources only in core
 
       ddt(Spe) = 0.0;
-      for(int x=mesh->xstart;x<=mesh->xend;x++) {
-        if(!mesh->periodicY(x))
+      for (int x=mesh->xstart;x<=mesh->xend;x++) {
+        if (!mesh->periodicY(x))
           continue; // Not periodic, so skip
 
-        for(int y=mesh->ystart;y<=mesh->yend;y++) {
+        for (int y=mesh->ystart;y<=mesh->yend;y++) {
           Spe(x,y) -= source_p * PeErr(x,y);
           ddt(Spe)(x,y) = -source_i * PeErr(x,y);
 
-          if(Spe(x,y) < 0.0) {
+          if (Spe(x,y) < 0.0) {
             Spe(x,y) = 0.0;
-            if(ddt(Spe)(x,y) < 0.0)
+            if (ddt(Spe)(x,y) < 0.0)
               ddt(Spe)(x,y) = 0.0;
           }
         }
@@ -2260,9 +2280,9 @@ int Hermes::rhs(BoutReal t) {
 
       if (energy_source) {
         // Add the same amount of energy to each particle
-        ddt(Pe) += Spe*Nelim / Nelim.DC();
+        PeSource = Spe*Nelim / Nelim.DC();
       } else {
-        ddt(Pe) += Spe;
+        PeSource = Spe;
       }
     } else {
       
@@ -2271,9 +2291,9 @@ int Hermes::rhs(BoutReal t) {
 
       if (energy_source) {
         // Add the same amount of energy to each particle
-        ddt(Pe) += Spe*Nelim / Nelim.DC();
+        PeSource = Spe*Nelim / Nelim.DC();
       } else {
-        ddt(Pe) += Spe*where(Spe, PeTarget, Pe);
+        PeSource = Spe*where(Spe, PeTarget, Pe);
       }
     }
   } else {
@@ -2281,14 +2301,20 @@ int Hermes::rhs(BoutReal t) {
 
     if (energy_source) {
       // Add the same amount of energy to each particle
-      ddt(Pe) += Spe*Nelim / Nelim.DC();
+      PeSource = Spe*Nelim / Nelim.DC();
     } else {
       // Add the same amount of energy per volume
       // If no particle source added, then this can lead to 
       // a small number of particles with a lot of energy!
-      ddt(Pe) += Spe*where(Spe, 1.0, Pe);
+      PeSource = Spe*where(Spe, 1.0, Pe);
     }
   }
+  
+  if (source_vary_g11) {
+    PeSource *= g11norm;
+  }
+
+  Pe += PeSource;
   
   //////////////////////
   // Numerical dissipation
@@ -2517,9 +2543,9 @@ int Hermes::rhs(BoutReal t) {
         
       if (energy_source) {
         // Add the same amount of energy to each particle
-        ddt(Pi) += Spi*Nelim / Nelim.DC();
+        PiSource = Spi*Nelim / Nelim.DC();
       } else {
-        ddt(Pi) += Spi;
+        PiSource = Spi;
       }
     } else {
         
@@ -2528,9 +2554,9 @@ int Hermes::rhs(BoutReal t) {
         
       if (energy_source) {
         // Add the same amount of energy to each particle
-        ddt(Pi) += Spi*Nelim / Nelim.DC();
+        PiSource = Spi*Nelim / Nelim.DC();
       } else {
-        ddt(Pi) += Spi*where(Spi, PiTarget, Pi);
+        PiSource = Spi*where(Spi, PiTarget, Pi);
       }
     }
   } else {
@@ -2538,15 +2564,21 @@ int Hermes::rhs(BoutReal t) {
 
     if (energy_source) {
       // Add the same amount of energy to each particle
-      ddt(Pi) += Spi*Nelim / Nelim.DC();
+      PiSource = Spi*Nelim / Nelim.DC();
     } else {
       // Add the same amount of energy per volume
       // If no particle source added, then this can lead to 
       // a small number of particles with a lot of energy!
-      ddt(Pi) += Spi*where(Spi, 1.0, Pi);
+      PiSource = Spi*where(Spi, 1.0, Pi);
     }
   }
     
+  if (source_vary_g11) {
+    PiSource *= g11norm;
+  }
+  
+  ddt(Pi) += PiSource;
+
   //////////////////////
   // Numerical dissipation
     
