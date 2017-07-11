@@ -114,8 +114,9 @@ private:
   BoutReal anomalous_chi;  // Electron thermal diffusion
   BoutReal anomalous_nu;   // Momentum diffusion (kinematic viscosity)
 
-  bool anomalous_D_all_terms; // Include terms in momentum and energy equations
-
+  bool anomalous_D_nvi; // Include terms in momentum equation
+  bool anomalous_D_pepi; // Include terms in Pe, Pi equations
+  
   bool ion_velocity;  // Include Vi terms
 
   bool phi3d;         // Use a 3D solver for phi
@@ -164,6 +165,7 @@ private:
   bool low_n_diffuse; // Diffusion at low density
   BoutReal ne_hyper_z, pe_hyper_z; // Hyper-diffusion
   BoutReal scale_num_cs; // Scale numerical sound speed
+  bool vepsi_dissipation; // Dissipation term in VePsi equation
 
   // Sources and profiles
   
