@@ -120,6 +120,7 @@ int Hermes::init(bool restarting) {
   OPTION(optsc, sheath_closure, true);
   OPTION(optsc, drift_wave, false);
 
+  // Cross-field transport
   OPTION(optsc, classical_diffusion, false);
   OPTION(optsc, anomalous_D, -1);
   OPTION(optsc, anomalous_chi, -1);
@@ -127,9 +128,12 @@ int Hermes::init(bool restarting) {
   OPTION(optsc, anomalous_D_nvi, true);
   OPTION(optsc, anomalous_D_pepi, true);
 
+  // Flux limiters
+  OPTION(optsc, flux_limit_alpha, -1);
   OPTION(optsc, kappa_limit_alpha, -1);
   OPTION(optsc, eta_limit_alpha, -1);
- 
+
+  // Numerical dissipation terms
   OPTION(optsc, numdiff, -1.0);
   OPTION(optsc, hyper, -1);
   OPTION(optsc, hyperpar, -1);
@@ -143,6 +147,7 @@ int Hermes::init(bool restarting) {
   OPTION(optsc, y_hyper_viscos, -1.0);
   OPTION(optsc, z_hyper_viscos, -1.0);
   OPTION(optsc, scale_num_cs, 1.0);
+  OPTION(optsc, floor_num_cs, -1.0);
   OPTION(optsc, vepsi_dissipation, false);
 
   OPTION(optsc, ne_hyper_z, -1.0);
@@ -724,6 +729,10 @@ int Hermes::rhs(BoutReal t) {
   // Assumes isothermal electrons, adiabatic ions
   // The factor scale_num_cs can be used to test sensitity
   Field3D sound_speed = scale_num_cs * sqrt(Telim + Tilim*(5./3));
+  if (floor_num_cs > 0.0) {
+    // Apply a floor function to the sound speed
+    sound_speed = floor(sound_speed, floor_num_cs);
+  }
 
   //////////////////////////////////////////////////////////////
   // Calculate electrostatic potential phi
@@ -2000,6 +2009,14 @@ int Hermes::rhs(BoutReal t) {
     if(electron_viscosity) {
       // Electron parallel viscosity (Braginskii)
       Field3D ve_eta = 0.973 * mi_me * tau_e * Telim;
+     
+      /* 
+      if (flux_limit_alpha > 0) {
+        // Limit to free streaming value
+        Field3D ve_eta_fs = flux_limit_alpha * sqrt(mi_me * Telim) * R0;
+        ve_eta = (ve_eta * ve_eta_fs) / (ve_eta + ve_eta_fs);
+      }
+      */
       
       if(eta_limit_alpha > 0.) {
         // SOLPS-style flux limiter
@@ -2030,7 +2047,7 @@ int Hermes::rhs(BoutReal t) {
     }
     
     if(hyper > 0.0) {
-      ddt(VePsi) -= hyper * mi_me * nu* Delp2(Jpar) / Nelim; //D4DY4_FV(hyper * SQ(SQ(mesh->dy)), Ve);
+      ddt(VePsi) -= hyper * mi_me * nu* Delp2(Jpar) / Nelim;
     }
 
     if(hyperpar > 0.0) {
@@ -2071,8 +2088,7 @@ int Hermes::rhs(BoutReal t) {
       ddt(NVi) -= Div_f_v_XPPM(NVi, Tilim*Curlb_B, ne_bndry_flux); // Grad-B, curvature drift
     }
     
-    //ddt(NVi) -= Div_parP_LtoC(NVi,Vi); // Parallel flow
-    ddt(NVi) -= Div_par_FV_FS(NVi,Vi, sound_speed);
+    ddt(NVi) -= Div_par_FV_FS(NVi,Vi, sound_speed, false);
     
     // Ignoring polarisation drift for now
     if (pe_par) {

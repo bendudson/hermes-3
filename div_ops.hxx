@@ -140,7 +140,7 @@ const Field3D Div_par_FV(const Field3D &f, const Field3D &v);
  *
  * Split into fluxes with speed v+a and v-a
  */
-const Field3D Div_par_FV_FS(const Field3D &f, const Field3D &v, const Field3D &a);
+const Field3D Div_par_FV_FS(const Field3D &f, const Field3D &v, const Field3D &a, bool fixflux = true);
 
 // Finite volume parallel divergence of a flow velocity
 const Field3D Div_parV_FV(const Field3D &v);

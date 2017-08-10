@@ -72,6 +72,8 @@ private:
   Field3D Wi;                    // Energy transfer from electrons to ions
   Field3D Pi_ciperp, Pi_cipar, Pi_ci;   // Ion collisional stress tensor
   BoutReal resistivity_multiply; ///< Factor in front of nu
+
+  BoutReal flux_limit_alpha;  // Flux limiter. < 0 disables
   BoutReal kappa_limit_alpha; // Heat flux limiter from SOLPS
   BoutReal eta_limit_alpha;   // Momentum flux limiter from SOLPS
   
@@ -165,6 +167,7 @@ private:
   bool low_n_diffuse; // Diffusion at low density
   BoutReal ne_hyper_z, pe_hyper_z; // Hyper-diffusion
   BoutReal scale_num_cs; // Scale numerical sound speed
+  BoutReal floor_num_cs; // Apply a floor to the numerical sound speed
   bool vepsi_dissipation; // Dissipation term in VePsi equation
 
   // Sources and profiles
