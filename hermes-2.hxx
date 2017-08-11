@@ -131,10 +131,14 @@ private:
   bool sheath_closure; // Sheath closure sink on vorticity (if sinks = true)
   bool drift_wave;     // Drift-wave closure (if sinks=true)
 
-  bool radial_buffers;  // Radial buffer regions
-  
-  Field2D sink_invlpar; // Parallel inverse connection length (1/L_{||}) for sink terms
-  Field2D alpha_dw; 
+  bool radial_buffers; // Radial buffer regions
+  int radial_inner_width; // Number of points in the inner radial buffer
+  int radial_outer_width; // Number of points in the outer radial buffer
+  BoutReal radial_buffer_D; // Diffusion in buffer region
+
+  Field2D sink_invlpar; // Parallel inverse connection length (1/L_{||}) for
+                        // sink terms
+  Field2D alpha_dw;
 
   // Sheath heat transmission factor
   int sheath_model;     // Sets boundary condition model

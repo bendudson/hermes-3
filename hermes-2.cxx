@@ -175,7 +175,10 @@ int Hermes::init(bool restarting) {
   }
   
   OPTION(optsc, radial_buffers, false);
-  
+  OPTION(optsc, radial_inner_width, 4);
+  OPTION(optsc, radial_oute\r_width, 4);
+  OPTION(optsc, radial_buffer_D, 1.0);
+
   // Output additional information
   OPTION(optsc, verbose, false);    // Save additional fields
   OPTION(optsc, output_ddt, false); // Save time derivatives
@@ -2206,11 +2209,11 @@ int Hermes::rhs(BoutReal t) {
   
   if (currents && resistivity) {
     // Ohmic heating
-    ddt(Pe) += nu*Jpar*(Jpar - Jpar0)/Nelim;
+    ddt(Pe) += nu * Jpar * (Jpar - Jpar0) / Nelim;
   }
 
   if (pe_hyper_z > 0.0) {
-    ddt(Pe) -= pe_hyper_z*SQ(SQ(mesh->dz))*D4DZ4(Pe);
+    ddt(Pe) -= pe_hyper_z * SQ(SQ(mesh->dz)) * D4DZ4(Pe);
   }
 
   ///////////////////////////////////
@@ -2282,13 +2285,13 @@ int Hermes::rhs(BoutReal t) {
   }
   // Transfer and source terms
   if (thermal_force) {
-    ddt(Pe) -= (2./3)*0.71*Jpar*Grad_parP(Te);
+    ddt(Pe) -= (2. / 3) * 0.71 * Jpar * Grad_parP(Te);
   }
   
   if (pe_par_p_term) {
     // This term balances energetically the pressure term
     // in Ohm's law
-    ddt(Pe) -= (2./3) * Pelim * Div_par(Ve);
+    ddt(Pe) -= (2. / 3) * Pelim * Div_par(Ve);
   }
   if (ramp_mesh && (t < ramp_timescale)) {
     ddt(Pe) += PeTarget / ramp_timescale;
@@ -2665,59 +2668,122 @@ int Hermes::rhs(BoutReal t) {
     
   ///////////////////////////////////////////////////////////
   // Radial buffer regions for turbulence simulations
-  
+
   if (radial_buffers) {
     /// Radial buffer regions
-  
-    BoutReal bufferD = 1.0;
 
-    if (mesh->firstX()){
-      BoutReal dz2 = mesh->dz*mesh->dz;
-      for(int i = mesh->xstart; i < mesh->xstart+5; i++)
-        for(int j=mesh->ystart;j<=mesh->yend;j++)
-          for(int k=0;k<mesh->ngz-1;k++) {
-            int kp = (k+1) % (mesh->ngz-1);
-            int km = (k-1 + mesh->ngz-1) % (mesh->ngz-1);
+    // Calculate Z averages
+    Field2D PeDC = Pe.DC();
+    Field2D PiDC = Pi.DC();
+    Field2D NeDC = Ne.DC();
+    Field2D VortDC = Vort.DC();
+    
+    if ((mesh->XGLOBAL(mesh->xstart) - mesh->xstart) < radial_inner_width) {
+      // This processor contains points inside the inner radial boundary
+      
+      int imax = mesh->xstart + radial_inner_width - 1
+        - (mesh->XGLOBAL(mesh->xstart) - mesh->xstart);
+      if (imax > mesh->xend) {
+        imax = mesh->xend;
+      }
+      
+      int imin =mesh->xstart;
+      if (!mesh->firstX()) {
+        --imin; // Calculate in guard cells, for radial fluxes
+      }
+      int ncz = mesh->ngz - 1;
+      
+      for (int i = imin; i <= imax; ++i) {
+        // position inside the boundary (0 = on boundary, 0.5 = first cell)
+        BoutReal pos = static_cast<BoutReal>(mesh->XGLOBAL(i) - mesh->xstart) + 0.5;
+        
+        // Diffusion coefficient which increases towards the boundary
+        BoutReal D = radial_buffer_D * (1. - pos / radial_inner_width);
+        
+        for (int j = mesh->ystart; j <= mesh->yend; ++j) {
+          BoutReal dx = mesh->dx(i,j);
+          BoutReal dx_xp = mesh->dx(i+1,j);
+          BoutReal J = mesh->J(i,j);
+          BoutReal J_xp = mesh->J(i+1,j);
 
-            // Z fluxes
-
-            ddt(Pe)(i,j,k) += 
-              bufferD*mesh->g33(i,j)*(Pe(i,j,km) - 2.*Pe(i,j,k) + Pe(i,j,kp))/dz2;
+          // Calculate metric factors for radial fluxes
+          BoutReal rad_flux_factor = 0.25*(J + J_xp)*(dx + dx_xp);
+          BoutReal x_factor = rad_flux_factor / (J * dx);
+          BoutReal xp_factor = rad_flux_factor / (J_xp * dx_xp);
           
-            ddt(Ne)(i,j,k) += 
-              bufferD*mesh->g33(i,j)*(Ne(i,j,km) - 2.*Ne(i,j,k) + Ne(i,j,kp))/dz2;
+          for (int k = 0; k < ncz; ++k) {
+            // Relax towards constant value on flux surface
+            ddt(Pe)(i,j,k) -= D*(Pe(i,j,k) - PeDC(i,j));
+            ddt(Pi)(i,j,k) -= D*(Pi(i,j,k) - PiDC(i,j));
+            ddt(Ne)(i,j,k) -= D*(Ne(i,j,k) - NeDC(i,j));
+            ddt(Vort)(i,j,k) -= D*(Vort(i,j,k) - VortDC(i,j));
+
             // Radial fluxes
-            
-            BoutReal f = 0.1*bufferD*mesh->g11(i,j)*(Ne(i+1,j,k) - Ne(i,j,k)) / SQ(mesh->dx(i,j));
-            ddt(Ne)(i,j,k) += f;
-            ddt(Ne)(i+1,j,k) -= f;
-          
-            f = 0.1*bufferD*mesh->g11(i,j)*(Pe(i+1,j,k) - Pe(i,j,k)) / SQ(mesh->dx(i,j));
-            ddt(Pe)(i,j,k) += f;
-            ddt(Pe)(i+1,j,k) -= f;
-          
-            //ddt(Vort)(i,j,k) += bufferD*mesh->g33(i,j)*(Vort(i,j,km) - 2.*Vort(i,j,k) + Vort(i,j,kp))/dz2;
-          
-            //ddt(Vort)(i,j,k) -= 0.01*Vort(i,j,k);
-          }
-    }
+            BoutReal f = D * (Ne(i + 1, j, k) - Ne(i, j, k));
+            ddt(Ne)(i, j, k) += f * x_factor;
+            ddt(Ne)(i + 1, j, k) -= f * xp_factor;
 
-    if (mesh->lastX()){ 
-      BoutReal dz2 = mesh->dz*mesh->dz;
-      for(int i = mesh->xend-4; i <= mesh->xend; i++)
-        for(int j=mesh->ystart;j<=mesh->yend;j++)
-          for(int k=0;k<mesh->ngz-1;k++) {
-            int kp = (k+1) % (mesh->ngz-1);
-            int km = (k-1 + mesh->ngz-1) % (mesh->ngz-1);
-            ddt(Pe)(i,j,k) += bufferD*mesh->g33(i,j)*(Pe(i,j,km) - 2.*Pe(i,j,k) + Pe(i,j,kp))/dz2;
-            ddt(Ne)(i,j,k) += bufferD*mesh->g33(i,j)*(Ne(i,j,km) - 2.*Ne(i,j,k) + Ne(i,j,kp))/dz2;
-            ddt(Vort)(i,j,k) += bufferD*mesh->g33(i,j)*(Vort(i,j,km) - 2.*Vort(i,j,k) + Vort(i,j,kp))/dz2;
-          
-            //ddt(Vort)(i,j,k) -= 0.01*Vort(i,j,k);
+            f = D * (Pe(i + 1, j, k) - Pe(i, j, k));
+            ddt(Pe)(i, j, k) += f * x_factor;
+            ddt(Pe)(i + 1, j, k) -= f * xp_factor;
+
+            f = D * (Pi(i + 1, j, k) - Pi(i, j, k));
+            ddt(Pi)(i, j, k) += f * x_factor;
+            ddt(Pi)(i + 1, j, k) -= f * xp_factor;
+
+            f = D * (Vort(i + 1, j, k) - Vort(i, j, k));
+            ddt(Vort)(i, j, k) += f * x_factor;
+            ddt(Vort)(i + 1, j, k) -= f * xp_factor;
           }
+        }
+      }
+    }
+    // Number of points in outer guard cells
+    int nguard = mesh->ngx-mesh->xend-1;
+    
+    if (mesh->GlobalNx - nguard - mesh->XGLOBAL(mesh->xend) <= radial_outer_width) {
+      
+      // Outer boundary
+      int imin = mesh->GlobalNx - nguard - radial_outer_width - mesh->XGLOBAL(0);
+      if (imin < mesh->xstart) {
+        imin = mesh->xstart;
+      }
+      int ncz = mesh->ngz - 1;
+      for (int i = imin; i <= mesh->xend; ++i) {
+
+        // position inside the boundary
+        BoutReal pos = static_cast<BoutReal>(mesh->GlobalNx - nguard -  mesh->XGLOBAL(i)) - 0.5;
+        
+        // Diffusion coefficient which increases towards the boundary
+        BoutReal D = radial_buffer_D * (1. - pos / radial_outer_width);
+        
+        for (int j = mesh->ystart; j <= mesh->yend; ++j) {
+          BoutReal dx = mesh->dx(i,j);
+          BoutReal dx_xp = mesh->dx(i+1,j);
+          BoutReal J = mesh->J(i,j);
+          BoutReal J_xp = mesh->J(i+1,j);
+
+          // Calculate metric factors for radial fluxes
+          BoutReal rad_flux_factor = 0.25*(J + J_xp)*(dx + dx_xp);
+          BoutReal x_factor = rad_flux_factor / (J * dx);
+          BoutReal xp_factor = rad_flux_factor / (J_xp * dx_xp);
+          
+          for (int k = 0; k < ncz; ++k) {
+            ddt(Pe)(i,j,k) -= D*(Pe(i,j,k) - PeDC(i,j));
+            ddt(Pi)(i,j,k) -= D*(Pi(i,j,k) - PiDC(i,j));
+            ddt(Ne)(i,j,k) -= D*(Ne(i,j,k) - NeDC(i,j));
+            ddt(Vort)(i,j,k) -= D*(Vort(i,j,k) - VortDC(i,j));
+            //ddt(Vort)(i,j,k) -= D*Vort(i,j,k);
+            
+            BoutReal f = D * (Vort(i + 1, j, k) - Vort(i, j, k));
+            ddt(Vort)(i, j, k) += f * x_factor;
+            ddt(Vort)(i + 1, j, k) -= f * xp_factor;
+          }
+        }
+      }
     }
   }
-  
+
   ///////////////////////////////////////////////////////////
   // Neutral gas
   if (neutrals) {
@@ -2734,11 +2800,11 @@ int Hermes::rhs(BoutReal t) {
     
     // Calculate atomic rates
     
-    if(neutral_friction) {
+    if (neutral_friction) {
       // Vorticity
-      if(boussinesq) {
+      if (boussinesq) {
         ddt(Vort) -= Div_Perp_Lap_FV( neutrals->Fperp/(Nelim * SQ(mesh->Bxy)), phi, vort_bndry_flux);
-      }else {
+      } else {
         ddt(Vort) -= Div_Perp_Lap_FV( neutrals->Fperp/SQ(mesh->Bxy), phi, vort_bndry_flux);
       }
     }
@@ -2808,32 +2874,33 @@ int Hermes::rhs(BoutReal t) {
 
   if (carbon_fraction > 0.0) {
     TRACE("Carbon impurity radiation");
-    Rzrad = carbon_rad->power(Te*Tnorm, Ne*Nnorm, Ne*(Nnorm*carbon_fraction)); // J / m^3 / s
-    Rzrad /= SI::qe*Tnorm*Nnorm * Omega_ci; // Normalise
-    
-    ddt(Pe) -= (2./3)*Rzrad;
+    Rzrad = carbon_rad->power(Te * Tnorm, Ne * Nnorm,
+                              Ne * (Nnorm * carbon_fraction)); // J / m^3 / s
+    Rzrad /= SI::qe * Tnorm * Nnorm * Omega_ci;                // Normalise
+
+    ddt(Pe) -= (2. / 3) * Rzrad;
   }
-  
+
   //////////////////////////////////////////////////////////////
   // Parallel closures for 2D simulations
-  
+
   if (sinks) {
     // Sink terms for 2D simulations
-    
-    //Field3D nsink = 0.5*Ne*sqrt(Telim)*sink_invlpar;   // n C_s/ (2L)  // Sound speed flow to targets
-    Field3D nsink = 0.5*sqrt(Ti)*Ne*sink_invlpar;
-    nsink = floor(nsink,0.0);
-    
+
+    // Field3D nsink = 0.5*Ne*sqrt(Telim)*sink_invlpar;   // n C_s/ (2L)  //
+    // Sound speed flow to targets
+    Field3D nsink = 0.5 * sqrt(Ti) * Ne * sink_invlpar;
+    nsink = floor(nsink, 0.0);
+
     ddt(Ne) -= nsink;
-    
-    Field3D conduct = (2./3)*kappa_epar * Te * SQ(sink_invlpar);
+
+    Field3D conduct = (2. / 3) * kappa_epar * Te * SQ(sink_invlpar);
     conduct = floor(conduct, 0.0);
-    ddt(Pe) -= 
-      conduct // Heat conduction
-      + Te*nsink                  // Advection
-      ;
-    
-    if(sheath_closure) {
+    ddt(Pe) -= conduct      // Heat conduction
+               + Te * nsink // Advection
+        ;
+
+    if (sheath_closure) {
       ///////////////////////////
       // Sheath dissipation closure
 
@@ -2873,18 +2940,18 @@ int Hermes::rhs(BoutReal t) {
     ddt(Ne) = lowPass(ddt(Ne), low_pass_z);
     ddt(Pe) = lowPass(ddt(Pe), low_pass_z);
 
-    if(currents) {
+    if (currents) {
       ddt(Vort) = lowPass(ddt(Vort), low_pass_z);
-      if(electromagnetic || FiniteElMass) {
+      if (electromagnetic || FiniteElMass) {
         ddt(VePsi) = lowPass(ddt(VePsi), low_pass_z);
       }
     }
-    if(ion_velocity) {
+    if (ion_velocity) {
       ddt(NVi) = lowPass(ddt(NVi), low_pass_z);
     }
   }
 
-  if(!evolve_plasma) {
+  if (!evolve_plasma) {
     ddt(Ne) = 0.0;
     ddt(Pe) = 0.0;
     ddt(Vort) = 0.0;
