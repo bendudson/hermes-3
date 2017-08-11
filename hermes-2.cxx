@@ -169,7 +169,7 @@ int Hermes::init(bool restarting) {
   
   // Fix profiles in SOL
   OPTION(optsc, sol_fix_profiles, false);
-  if(sol_fix_profiles) {
+  if (sol_fix_profiles) {
     sol_ne = FieldFactory::get()->parse("sol_ne", optsc);
     sol_te = FieldFactory::get()->parse("sol_te", optsc);
   }
@@ -177,26 +177,26 @@ int Hermes::init(bool restarting) {
   OPTION(optsc, radial_buffers, false);
   
   // Output additional information
-  OPTION(optsc, verbose, false); // Save additional fields
+  OPTION(optsc, verbose, false);    // Save additional fields
   OPTION(optsc, output_ddt, false); // Save time derivatives
 
   // Normalisation
   OPTION(optsc, Tnorm, 100);  // Reference temperature [eV]
   OPTION(optsc, Nnorm, 1e19); // Reference density [m^-3]
   OPTION(optsc, Bnorm, 1.0);  // Reference magnetic field [T]
-  
-  OPTION(optsc, AA, 2.0);     // Ion mass
+
+  OPTION(optsc, AA, 2.0); // Ion mass (2 = Deuterium)
 
   output.write("Normalisation Te=%e, Ne=%e, B=%e\n", Tnorm, Nnorm, Bnorm);
   SAVE_ONCE4(Tnorm, Nnorm, Bnorm, AA); // Save
 
-  Cs0      = sqrt(qe*Tnorm / (AA*Mp)); // Reference sound speed [m/s]
-  Omega_ci = qe*Bnorm / (AA*Mp);       // Ion cyclotron frequency [1/s]
-  rho_s0   = Cs0 / Omega_ci;
-  
-  mi_me  = AA*Mp/Me;
-  beta_e = qe*Tnorm*Nnorm / (SQ(Bnorm)/mu0);
-  
+  Cs0 = sqrt(qe * Tnorm / (AA * Mp)); // Reference sound speed [m/s]
+  Omega_ci = qe * Bnorm / (AA * Mp);  // Ion cyclotron frequency [1/s]
+  rho_s0 = Cs0 / Omega_ci;
+
+  mi_me = AA * Mp / Me;
+  beta_e = qe * Tnorm * Nnorm / (SQ(Bnorm) / mu0);
+
   output.write("\tmi_me=%e, beta_e=%e\n", mi_me, beta_e);
   SAVE_ONCE2(mi_me, beta_e);
 
@@ -214,17 +214,17 @@ int Hermes::init(bool restarting) {
   
   if (anomalous_D > 0.0) {
     // Normalise
-    anomalous_D /= rho_s0*rho_s0*Omega_ci; // m^2/s
+    anomalous_D /= rho_s0 * rho_s0 * Omega_ci; // m^2/s
     output.write("\tnormalised anomalous D_perp = %e\n", anomalous_D);
   }
   if (anomalous_chi > 0.0) {
     // Normalise
-    anomalous_chi /= rho_s0*rho_s0*Omega_ci; // m^2/s
+    anomalous_chi /= rho_s0 * rho_s0 * Omega_ci; // m^2/s
     output.write("\tnormalised anomalous chi_perp = %e\n", anomalous_chi);
   }
   if (anomalous_nu > 0.0) {
     // Normalise
-    anomalous_nu /= rho_s0*rho_s0*Omega_ci; // m^2/s
+    anomalous_nu /= rho_s0 * rho_s0 * Omega_ci; // m^2/s
     output.write("\tnormalised anomalous nu_perp = %e\n", anomalous_nu);
   }
 
@@ -232,8 +232,8 @@ int Hermes::init(bool restarting) {
     Jpar0 = 0.0;
   } else {
     // Read equilibrium current density
-    //GRID_LOAD(Jpar0);
-    //Jpar0 /= qe*Nnorm*Cs0;
+    // GRID_LOAD(Jpar0);
+    // Jpar0 /= qe*Nnorm*Cs0;
     Jpar0 = 0.0;
   }
 
@@ -272,19 +272,18 @@ int Hermes::init(bool restarting) {
   Spi /= Omega_ci;
   
   OPTION(optsc, core_sources, false);
-  if(core_sources) {
-    for(int x=mesh->xstart;x<=mesh->xend;x++) {
-      if(!mesh->periodicY(x)) {
+  if (core_sources) {
+    for (int x = mesh->xstart; x <= mesh->xend; x++) {
+      if (!mesh->periodicY(x)) {
         // Not periodic, so not in core
-        for(int y=mesh->ystart;y<=mesh->yend;y++) {
-          Sn(x,y) = 0.0;
-          Spe(x,y) = 0.0;
-          Spi(x,y) = 0.0;
+        for (int y = mesh->ystart; y <= mesh->yend; y++) {
+          Sn(x, y) = 0.0;
+          Spe(x, y) = 0.0;
         }
       }
     }
   }
-  
+
   // Mid-plane power flux q_||
   string midplane_power;
   OPTION(optpe, midplane_power, "0.0");
@@ -301,11 +300,11 @@ int Hermes::init(bool restarting) {
   solver->add(Pe, "Pe");
   EvolvingVars.add(Ne, Pe);
 
-  if(output_ddt) {
+  if (output_ddt) {
     SAVE_REPEAT2(ddt(Ne), ddt(Pe));
   }
 
-  if(j_par || j_diamag) {
+  if (j_par || j_diamag) {
     // Have a source of vorticity
     solver->add(Vort, "Vort");
     EvolvingVars.add(Vort);
