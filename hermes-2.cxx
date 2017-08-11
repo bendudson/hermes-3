@@ -2369,37 +2369,39 @@ int Hermes::rhs(BoutReal t) {
 
     if (energy_source) {
       // Add the same amount of energy to each particle
-      PeSource = Spe*Nelim / Nelim.DC();
+      PeSource = Spe * Nelim / Nelim.DC();
     } else {
       // Add the same amount of energy per volume
-      // If no particle source added, then this can lead to 
+      // If no particle source added, then this can lead to
       // a small number of particles with a lot of energy!
-      PeSource = Spe*where(Spe, 1.0, Pe);
+      PeSource = Spe * where(Spe, 1.0, Pe);
     }
   }
-  
+
   if (source_vary_g11) {
     PeSource *= g11norm;
   }
 
-  Pe += PeSource;
-  
+  ddt(Pe) += PeSource;
+
   //////////////////////
   // Numerical dissipation
-  
+
   if (ExBdiff > 0.0) {
     if (ExBpar) {
-      ddt(Pe) += ExBdiff * Div_Perp_Lap_XYZ(SQ(mesh->dx)*mesh->g_11, Pe, pe_bndry_flux);
+      ddt(Pe) += ExBdiff *
+                 Div_Perp_Lap_XYZ(SQ(mesh->dx) * mesh->g_11, Pe, pe_bndry_flux);
     } else {
       ddt(Pe) += ExBdiff * Div_Perp_Lap_FV_Index(1.0, Pe, pe_bndry_flux);
     }
   }
 
   if (ADpar > 0.0) {
-    //ddt(Pe) += ADpar * AddedDissipation(1.0, Pe, Pe, false);
+    // ddt(Pe) += ADpar * AddedDissipation(1.0, Pe, Pe, false);
+
     ddt(Pe) += ADpar * AddedDissipation(Ne, Pe, Pelim, ADpar_bndry);
     if (ADpar_phine) {
-      ddt(Pe) -= ADpar * AddedDissipation(Ne, phi, Telim*Nelim, ADpar_bndry);
+      ddt(Pe) -= ADpar * AddedDissipation(Ne, phi, Telim * Nelim, ADpar_bndry);
     } else {
       ddt(Pe) -= ADpar * AddedDissipation(1.0, phi, Pe, ADpar_bndry);
     }
