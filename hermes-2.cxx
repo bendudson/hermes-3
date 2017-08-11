@@ -154,6 +154,7 @@ int Hermes::init(bool restarting) {
   OPTION(optsc, pe_hyper_z, -1.0);
 
   OPTION(optsc, low_n_diffuse, true);
+  OPTION(optsc, low_n_diffuse_perp, false);
 
   OPTION(optsc, resistivity_multiply, 1.0);
 
@@ -1851,13 +1852,17 @@ int Hermes::rhs(BoutReal t) {
   }
 
   if (low_n_diffuse) {
-    // Diffusion which kicks in at very low density, in order to 
+    // Diffusion which kicks in at very low density, in order to
     // help prevent negative density regions
-    ddt(Ne) += Div_par_diffusion(SQ(mesh->dy)*mesh->g_22*1e-4/Nelim, Ne, false);
+    ddt(Ne) +=
+        Div_par_diffusion(SQ(mesh->dy) * mesh->g_22 * 1e-4 / Nelim, Ne, false);
+  }
+  if (low_n_diffuse_perp) {
+    ddt(Ne) += Div_Perp_Lap_FV_Index(1e-4 / Nelim, Ne, ne_bndry_flux);
   }
 
   if (ne_hyper_z > 0.) {
-    ddt(Ne) -= ne_hyper_z*SQ(SQ(mesh->dz))*D4DZ4(Ne);
+    ddt(Ne) -= ne_hyper_z * SQ(SQ(mesh->dz)) * D4DZ4(Ne);
   }
 
   ///////////////////////////////////////////////////////////
@@ -1875,12 +1880,12 @@ int Hermes::rhs(BoutReal t) {
     if (j_par) {
       TRACE("Vort:j_par");
       // Parallel current
-      //ddt(Vort) += Div_par(Jpar);
-      ddt(Vort) += 0.5*(Div_par(Jpar) + Ne*Div_par(Vi-Ve) + (Vi-Ve)*Grad_par(Ne));
-    }    
-    
-    if(j_diamag) {
-      TRACE("Vort:j_diamag");
+      // ddt(Vort) += Div_par(Jpar);
+      ddt(Vort) += 0.5 * (Div_par(Jpar) + Ne * Div_par(Vi - Ve) +
+                          (Vi - Ve) * Grad_par(Ne));
+    }
+
+    if (j_diamag) {
       // Electron diamagnetic current
       
       // Note: This term is central differencing so that it balances

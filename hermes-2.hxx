@@ -85,7 +85,7 @@ private:
   
   // Impurity radiation
   BoutReal carbon_fraction;
-  Field3D Rzrad; // Radiated power
+  Field3D Rzrad;             // Radiated power
   RadiatedPower *carbon_rad; // Carbon cooling curve
   
   // Switches
@@ -164,7 +164,8 @@ private:
   bool ADpar_bndry; // Boundaries included in ADpar?
   int low_pass_z; // Fourier filter in Z 
   BoutReal z_hyper_viscos, x_hyper_viscos, y_hyper_viscos; // 4th-order derivatives
-  bool low_n_diffuse; // Diffusion at low density
+  bool low_n_diffuse; // Diffusion in parallel direction at low density
+  bool low_n_diffuse_perp; // Diffusion in perpendicular direction at low density
   BoutReal ne_hyper_z, pe_hyper_z; // Hyper-diffusion
   BoutReal scale_num_cs; // Scale numerical sound speed
   BoutReal floor_num_cs; // Apply a floor to the numerical sound speed
