@@ -1786,10 +1786,12 @@ const Field3D Div_par_FV_FS(const Field3D &f, const Field3D &v,
   // Finite volume parallel divergence
   Field3D result = 0.0;
 
+  int ncz = mesh->ngz-1;
+  
   // Calculate in guard cells
   int ys;
   int ye;
-
+  
   for (int i = mesh->xstart; i <= mesh->xend; i++) {
 
     if (!mesh->firstY(i) || mesh->periodicY(i)) {
@@ -1810,7 +1812,28 @@ const Field3D Div_par_FV_FS(const Field3D &f, const Field3D &v,
     }
 
     for (int j = ys; j <= ye; j++) {
-      for (int k = 0; k < mesh->ngz - 1; k++) {
+
+      // Calculate factors for right cell boundary
+      BoutReal rflux_factor = (mesh->J(i, j) + mesh->J(i, j + 1)) /
+        (sqrt(mesh->g_22(i, j)) + sqrt(mesh->g_22(i, j + 1)));
+
+      BoutReal rflux_c = rflux_factor / (mesh->dy(i, j) * mesh->J(i, j));
+      BoutReal rflux_p = rflux_factor / (mesh->dy(i, j + 1) * mesh->J(i, j + 1));
+      
+      // Calculate factors for left cell boundary
+      BoutReal lflux_factor = (mesh->J(i, j) + mesh->J(i, j - 1)) /
+        (sqrt(mesh->g_22(i, j)) + sqrt(mesh->g_22(i, j - 1)));
+
+      BoutReal lflux_c = lflux_factor / (mesh->dy(i, j) * mesh->J(i, j));
+      BoutReal lflux_m = lflux_factor / (mesh->dy(i, j - 1) * mesh->J(i, j - 1));
+
+      // Check if this is the first or last point in the domain
+      bool first_point = mesh->firstY(i) && (j == mesh->ystart) && !mesh->periodicY(i);
+      bool last_point  = mesh->lastY(i) && (j == mesh->yend) && !mesh->periodicY(i);
+
+      BoutReal dy = mesh->dy(i, j);
+      
+      for (int k = 0; k < ncz; k++) {
 
         ////////////////////////////////////////////
         // Reconstruct f at the cell faces
@@ -1825,7 +1848,7 @@ const Field3D Div_par_FV_FS(const Field3D &f, const Field3D &v,
         // Upwind(s, mesh->dy(i,j));  // 1st order accurate
         // Fromm(s, mesh->dy(i,j));     // 2nd order, some upwinding
         // MinMod(s, mesh->dy(i,j));  // Slope limiter
-        MC(s, mesh->dy(i, j)); // MC slope limiter
+        MC(s, dy); // MC slope limiter
 
         ////////////////////////////////////////////
         // Right boundary
@@ -1834,7 +1857,7 @@ const Field3D Div_par_FV_FS(const Field3D &f, const Field3D &v,
         BoutReal vpar = 0.5 * (v(i, j, k) + v(i, j + 1, k));
         BoutReal flux;
 
-        if (mesh->lastY(i) && (j == mesh->yend) && !mesh->periodicY(i)) {
+        if (last_point) {
           // Last point in domain
 
           BoutReal bndryval = 0.5 * (s.c + s.p);
@@ -1862,18 +1885,16 @@ const Field3D Div_par_FV_FS(const Field3D &f, const Field3D &v,
             flux = s.R * 0.5 * (vpar + amax);
           }
         }
-        flux *= (mesh->J(i, j) + mesh->J(i, j + 1)) /
-                (sqrt(mesh->g_22(i, j)) + sqrt(mesh->g_22(i, j + 1)));
 
-        result(i, j, k) += flux / (mesh->dy(i, j) * mesh->J(i, j));
-        result(i, j + 1, k) -= flux / (mesh->dy(i, j + 1) * mesh->J(i, j + 1));
+        result(i, j, k) += flux * rflux_c;
+        result(i, j + 1, k) -= flux * rflux_p;
 
         ////////////////////////////////////////////
         // Calculate at left boundary
 
         vpar = 0.5 * (v(i, j, k) + v(i, j - 1, k));
 
-        if (mesh->firstY(i) && (j == mesh->ystart) && !mesh->periodicY(i)) {
+        if (first_point) {
           // First point in domain
           BoutReal bndryval = 0.5 * (s.c + s.m);
           if (fixflux) {
@@ -1899,11 +1920,9 @@ const Field3D Div_par_FV_FS(const Field3D &f, const Field3D &v,
             flux = s.L * 0.5 * (vpar - amax);
           }
         }
-        flux *= (mesh->J(i, j) + mesh->J(i, j - 1)) /
-                (sqrt(mesh->g_22(i, j)) + sqrt(mesh->g_22(i, j - 1)));
 
-        result(i, j, k) -= flux / (mesh->dy(i, j) * mesh->J(i, j));
-        result(i, j - 1, k) += flux / (mesh->dy(i, j - 1) * mesh->J(i, j - 1));
+        result(i, j, k) -= flux * lflux_c;
+        result(i, j - 1, k) += flux * lflux_m;
       }
     }
   }
