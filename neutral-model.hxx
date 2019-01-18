@@ -14,7 +14,7 @@
 
 class NeutralModel {
 public:
-  NeutralModel(Options *options) {
+  NeutralModel(Options &options) {
     S = 0;
     F = 0;
     Fperp = 0;
@@ -32,7 +32,7 @@ public:
   /*!
    * Creates an instance of NeutralModel, based on given options
    */
-  static NeutralModel* create(Solver *solver, Mesh *mesh, Options *options);
+  static NeutralModel* create(Solver *solver, Mesh *mesh, Options &options);
   
   /*!
    * Set normalisations for temperature [eV], density [m^-3], 
