@@ -2,6 +2,7 @@
 #include "diffusion2d.hxx"
 
 #include <bout/constants.hxx>
+#include <bout/fv_ops.hxx>
 #include "div_ops.hxx"
 
 Diffusion2D::Diffusion2D(Solver *solver, Mesh *mesh, Options &options) : NeutralModel(options) {

@@ -155,6 +155,8 @@ void FullVelocity::update(const Field3D &Ne, const Field3D &Te,
 
   mesh->communicate(Nn2D, Vn2D, Pn2D);
 
+  Coordinates *coord = mesh->getCoordinates();
+  
   // Navier-Stokes for axisymmetric neutral gas profiles
   // Nn2D, Pn2D and Tn2D are unfloored
   Tn2D = Pn2D / Nn2D;
@@ -326,25 +328,24 @@ void FullVelocity::update(const Field3D &Ne, const Field3D &Te,
   Fperp = Rrc + Rcx; // Friction for vorticity
 
   // Loss of momentum in the X and Z directions
-  ddt(Vn2D).x -= (Rcx.DC() + Riz.DC()) * Vn2D.x / Nn2D_floor;
-  ddt(Vn2D).z -= (Rcx.DC() + Riz.DC()) * Vn2D.z / Nn2D_floor;
+  ddt(Vn2D).x -= (DC(Rcx) + DC(Riz)) * Vn2D.x / Nn2D_floor;
+  ddt(Vn2D).z -= (DC(Rcx) + DC(Riz)) * Vn2D.z / Nn2D_floor;
 
   // Particles
-  ddt(Nn2D) += S.DC(); // Average over toroidal angle z
+  ddt(Nn2D) += DC(S); // Average over toroidal angle z
 
   // Energy
-  ddt(Pn2D) += (2. / 3) * Qi.DC();
+  ddt(Pn2D) += (2. / 3) * DC(Qi);
 
   // Momentum. Note need to turn back into covariant form
-  ddt(Vn2D).y += F.DC() * (coord->J * coord->Bxy) / Nn2D_floor;
+  ddt(Vn2D).y += DC(F) * (coord->J * coord->Bxy) / Nn2D_floor;
 
   // Density evolution
-  for (int i = 0; i < mesh->LocalNx; i++)
-    for (int j = 0; j < mesh->LocalNy; j++) {
-      if ((Nn2D(i, j) < 1e-8) && (ddt(Nn2D)(i, j) < 0.0)) {
-        ddt(Nn2D)(i, j) = 0.0;
-      }
+  for (auto &i : Nn2D.getRegion("RGN_ALL")) {
+    if ((Nn2D[i] < 1e-8) && (ddt(Nn2D)[i] < 0.0)) {
+      ddt(Nn2D)[i] = 0.0;
     }
+  }
 }
 
 void FullVelocity::addDensity(int x, int y, int z, BoutReal dndt) {

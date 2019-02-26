@@ -24,6 +24,8 @@ void NeutralRecycling::update(const Field3D &Ne, const Field3D &Te,
                               const Field3D &Ti, const Field3D &Vi) {
   TRACE("NeutralRecycling::update");
 
+  Coordinates *coord = mesh->getCoordinates();
+  
   // Lower limit for neutral density (mainly for first time through when Nn = 0)
   Nn = floor(Nn, 1e-8);
 
@@ -41,34 +43,26 @@ void NeutralRecycling::update(const Field3D &Ne, const Field3D &Te,
   static bool first_time = true;
   if (first_time) {
     Field2D ll;
-    ll = CumSumY2D(hthe * mesh->dy / Lmax, true);
+    ll = CumSumY2D(hthe * coord->dy / Lmax, true);
     Nn = max(Nelim) * exp(-ll);
     first_time = false;
   }
   // calculate iz and cx mean free paths
-  for (int i = mesh->xstart; i <= mesh->xend; i++) {
-    for (int j = mesh->ystart; j <= mesh->yend; j++) {
-      for (int k = 0; k < mesh->LocalNz; k++) {
-        vth_n = sqrt(Tn(i, j, k)) * Lnorm * Fnorm; // in m/s
-        sigma_cx = Nelim(i, j, k) * Nnorm *
-                   hydrogen.chargeExchange(Te(i, j, k) * Tnorm); // in seconds
-        sigma_iz = Nelim(i, j, k) * Nnorm * Nn(i, j, k) *
-                   hydrogen.ionisation(Te(i, j, k) * Tnorm); // in seconds
-        // mean-free path for cx and iz is sqrt(l_cx*l_iz), and each are
-        // vth/<sig-v>
-        lambda(i, j, k) =
-            vth_n / sqrt(sigma_cx * sigma_iz); // min( vth_n /
-                                               // sqrt(sigma_cx*sigma_iz),
-                                               // Lmax); // in meters
-      }
-    }
+  for (auto &i : lambda.getRegion("RGN_NOBNDRY")) {
+    vth_n = sqrt(Tn[i]) * Lnorm * Fnorm; // in m/s
+                                         // in seconds
+    sigma_cx = Nelim[i] * Nnorm * hydrogen.chargeExchange(Te[i] * Tnorm);
+    // in seconds
+    sigma_iz = Nelim[i] * Nnorm * Nn[i] * hydrogen.ionisation(Te[i] * Tnorm);
+    // mean-free path for cx and iz is sqrt(l_cx*l_iz), and each are
+    // vth/<sig-v>
+    lambda[i] = vth_n / sqrt(sigma_cx * sigma_iz);
   }
 
   // Sum in y dy/lambda (in meters) for exponential (if lambda is constant,
   // results in exp(-y/lambda) )
-  lambda_int =
-      CumSumY3D(hthe * mesh->dy / lambda,
-                true); // length in poloidal plane - appropriate for neutrals
+  // length in poloidal plane - appropriate for neutrals
+  lambda_int = CumSumY3D(hthe * coord->dy / lambda, true);
 
   // int(S dV) = fr * N_lost (ie. volume integral of ionization density source =
   // recycling fraction * particle loss rate)
@@ -81,11 +75,11 @@ void NeutralRecycling::update(const Field3D &Ne, const Field3D &Te,
 
       // number of particles lost per dt (flux out times perp volume) [t^-1]
       nlost = bcast_lasty(fluxout * 0.5 *
-                          (mesh->J(i, mesh->yend) * mesh->dx(i, mesh->yend) *
-                               mesh->dz / sqrt(mesh->g_22(i, mesh->yend)) +
-                           mesh->J(i, mesh->yend + 1) *
-                               mesh->dx(i, mesh->yend + 1) * mesh->dz /
-                               sqrt(mesh->g_22(i, mesh->yend + 1))));
+                          (coord->J(i, mesh->yend) * coord->dx(i, mesh->yend) *
+                               coord->dz / sqrt(coord->g_22(i, mesh->yend)) +
+                           coord->J(i, mesh->yend + 1) *
+                               coord->dx(i, mesh->yend + 1) * coord->dz /
+                               sqrt(coord->g_22(i, mesh->yend + 1))));
 
       // Integrate ionization rate over volume to get volume loss rate (simple
       // integration using trap rule)
@@ -93,8 +87,8 @@ void NeutralRecycling::update(const Field3D &Ne, const Field3D &Te,
       for (int j = mesh->ystart; j <= mesh->yend; j++) {
         sigma_iz = hydrogen.ionisation(Te(i, j, k) * Tnorm) * Nnorm /
                    Fnorm; // ionization rate [d^3]/[t]
-        BoutReal dV = mesh->J(i, j) * mesh->dx(i, j) * mesh->dy(i, j) *
-                      mesh->dz; // volume element
+        BoutReal dV = coord->J(i, j) * coord->dx(i, j) * coord->dy(i, j) *
+                      coord->dz; // volume element
         nnexp += Nelim(i, j, k) * sigma_iz * exp(-lambda_int(i, j, k)) *
                  dV; // full integral of density source [d^3]/[t]
       }
@@ -163,28 +157,28 @@ const Field2D NeutralRecycling::CumSumY2D(const Field2D &f, bool reverse) {
       // All but last processor receive
       if (!mesh->lastY()) {
         mesh->wait(mesh->irecvYOutOutdest(&result(i, mesh->yend + 1), 1,
-                                          mesh->ngx * i));
+                                          mesh->LocalNz * i));
       }
       // Calculate sum (reversed)
       for (int j = mesh->yend; j >= mesh->ystart; j--) {
-        result[i][j] = result[i][j + 1] + f[i][j];
+        result(i, j) = result(i, j + 1) + f(i, j);
       }
       // Send the value at yend to the next processor.
-      mesh->sendYInOutdest(&result(i, mesh->ystart), 1, mesh->ngx * i);
+      mesh->sendYInOutdest(&result(i, mesh->ystart), 1, mesh->LocalNz * i);
     }
   } else {
     for (int i = mesh->xstart; i <= mesh->xend; i++) {
       // All but first processor receive
       if (!mesh->firstY()) {
         mesh->wait(mesh->irecvYInIndest(&result(i, mesh->ystart - 1), 1,
-                                        mesh->ngx * i));
+                                        mesh->LocalNz * i));
       }
       // Calculate sum
       for (int j = mesh->ystart; j <= mesh->yend; j++) {
-        result[i][j] = result[i][j - 1] + f[i][j];
+        result(i,j) = result(i, j - 1) + f(i, j);
       }
       // Send the value at yend to the next processor.
-      mesh->sendYOutIndest(&result(i, mesh->yend), 1, mesh->ngx * i);
+      mesh->sendYOutIndest(&result(i, mesh->yend), 1, mesh->LocalNz * i);
     }
   }
 
@@ -214,7 +208,7 @@ const Field3D NeutralRecycling::CumSumY3D(const Field3D &f, bool reverse) {
       }
     }
   } else {
-    for (int k = 0; k < mesh->ngz; k++) {
+    for (int k = 0; k < mesh->LocalNz; k++) {
       for (int i = mesh->xstart; i <= mesh->xend; i++) {
         // All but first processor receive
         if (!mesh->firstY()) {

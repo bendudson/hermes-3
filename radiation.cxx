@@ -15,10 +15,9 @@ const Field3D RadiatedPower::power(const Field3D &Te, const Field3D &Ne,
   Field3D result;
   result.allocate();
 
-  for (int i = 0; i < mesh->LocalNx; i++)
-    for (int j = 0; j < mesh->LocalNy; j++)
-      for (int k = 0; k < mesh->LocalNz; k++)
-        result(i, j, k) = power(Te(i, j, k), Ne(i, j, k), Ni(i, j, k));
+  for (auto &i : result.getRegion("RGN_ALL")) {
+    result[i] = power(Te[i], Ne[i], Ni[i]);
+  }
 
   return result;
 }
@@ -32,12 +31,12 @@ InterpRadiatedPower::InterpRadiatedPower(const std::string &filename) {
     throw BoutException("InterpRadiatedPower: Couldn't open file %s\n",
                         filename.c_str());
 
-  string line;
+  std::string line;
   int linenr = 1;
   while (std::getline(file, line)) {
     // Expecting either a comment, blank line, or two numbers
     // Remove comments, then whitespace from left and right
-    string strippedline = trim(trimComments(line));
+    std::string strippedline = trim(trimComments(line));
 
     if (strippedline.length() == 0)
       continue;

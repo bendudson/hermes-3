@@ -3,6 +3,7 @@
 
 #include <boutexception.hxx>
 #include <options.hxx>
+#include <bout/fv_ops.hxx>
 
 #include "div_ops.hxx"
 
@@ -40,6 +41,8 @@ void NeutralMixed::update(const Field3D &Ne, const Field3D &Te,
 
   mesh->communicate(Nn, Pn, NVn);
 
+  Coordinates *coord = mesh->getCoordinates();
+  
   //////////////////////////////////////////////////////
   // 3D model, diffusive in X-Z, fluid in Y
   //
@@ -140,13 +143,17 @@ void NeutralMixed::update(const Field3D &Ne, const Field3D &Te,
   Field3D logPnlim = log(Pnlim);
   logPnlim.applyBoundary("neumann");
 
+  // Sound speed appearing in Lax flux for advection terms
+  Field3D sound_speed = sqrt(Tn * (5. / 3));
+  
   /////////////////////////////////////////////////////
   // Neutral density
   TRACE("Neutral density");
 
-  ddt(Nn) = -FV::Div_par(Nn, Vn) // Advection
-            + S                  // Source from recombining plasma
-            + FV::Div_a_Laplace_perp(Dnn * Nn, logPnlim) // Perpendicular diffusion
+  ddt(Nn) =
+      -FV::Div_par(Nn, Vn, sound_speed) // Advection
+      + S                               // Source from recombining plasma
+      + FV::Div_a_Laplace_perp(Dnn * Nn, logPnlim) // Perpendicular diffusion
       ;
 
   /////////////////////////////////////////////////////
@@ -154,7 +161,7 @@ void NeutralMixed::update(const Field3D &Ne, const Field3D &Te,
   TRACE("Neutral momentum");
 
   ddt(NVn) =
-      -FV::Div_par(NVn, Vn)                         // Momentum flow
+      -FV::Div_par(NVn, Vn, sound_speed)            // Momentum flow
       + F                                           // Friction with plasma
       - Grad_par(Pnlim)                             // Pressure gradient
       + FV::Div_a_Laplace_perp(Dnn * NVn, logPnlim) // Perpendicular diffusion
@@ -163,7 +170,7 @@ void NeutralMixed::update(const Field3D &Ne, const Field3D &Te,
       ;
 
   if (numdiff > 0.0) {
-    ddt(NVn) += FV::Div_par_K_Grad_par(SQ(mesh->dy) * mesh->g_22 * numdiff, Vn);
+    ddt(NVn) += FV::Div_par_K_Grad_par(SQ(coord->dy) * coord->g_22 * numdiff, Vn);
   }
 
   Fperp = Rcx + Rrc;
@@ -173,7 +180,7 @@ void NeutralMixed::update(const Field3D &Ne, const Field3D &Te,
   TRACE("Neutral pressure");
 
   ddt(Pn) =
-      -FV::Div_par(Pn, Vn)                         // Advection
+      -FV::Div_par(Pn, Vn, sound_speed)            // Advection
       - (2. / 3) * Pnlim * Div_par(Vn)             // Compression
       + (2. / 3) * Qi                              // Energy exchange with ions
       + FV::Div_a_Laplace_perp(Dnn * Pn, logPnlim) // Perpendicular diffusion
