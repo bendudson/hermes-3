@@ -35,7 +35,6 @@ void NeutralRecycling::update(const Field3D &Ne, const Field3D &Te,
   // field line)
   BoutReal nnexp, nlost, nnexp_tot;
   BoutReal vth_n, sigma_cx, sigma_iz, fluxout;
-  BoutReal Nn0max = 10.0; // max(Nelim,true);
   lambda = 0.0;
   Nn0 = 0.0;
   // Approximate neutral density at t=0 to be exponential away from plate with

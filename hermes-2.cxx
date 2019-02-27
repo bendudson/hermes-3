@@ -562,8 +562,7 @@ int Hermes::init(bool restarting) {
   }
 
   // Apar (Psi) solver
-  // aparSolver = Laplacian::create(opt->getSection("aparSolver"));
-  aparSolver = LaplaceXZ::create(mesh, &opt["aparSolver"]);
+  aparSolver = LaplaceXZ::create(mesh, &opt["aparSolver"], CELL_CENTRE);
   if (split_n0_psi) {
     // Use another XY solver for n=0 psi component
     aparXY = new LaplaceXY(mesh);
@@ -662,7 +661,7 @@ int Hermes::rhs(BoutReal t) {
 
         BoutReal te_bndry = pe_bndry / ne_bndry;
         BoutReal ti_bndry = pi_bndry / ne_bndry;
-        BoutReal vi_bndry = vi_bndry / ne_bndry;
+        BoutReal vi_bndry = nvi_bndry / ne_bndry;
 
         Te(1, j, k) = 2. * te_bndry - Te(2, j, k);
         Ti(1, j, k) = 2. * ti_bndry - Ti(2, j, k);
@@ -692,7 +691,7 @@ int Hermes::rhs(BoutReal t) {
 
         BoutReal te_bndry = pe_bndry / ne_bndry;
         BoutReal ti_bndry = pi_bndry / ne_bndry;
-        BoutReal vi_bndry = vi_bndry / ne_bndry;
+        BoutReal vi_bndry = nvi_bndry / ne_bndry;
 
         Te(n - 1, j, k) = 2. * te_bndry - Te(n - 2, j, k);
         Ti(n - 1, j, k) = 2. * ti_bndry - Ti(n - 2, j, k);
@@ -1971,7 +1970,7 @@ int Hermes::rhs(BoutReal t) {
     }
 
     if (ion_viscosity) {
-      TRACE("Vort:classical_diffusion");
+      TRACE("Vort:ion_viscosity");
       // Ion collisional viscosity.
       // Contains poloidal viscosity
 
@@ -1984,24 +1983,23 @@ int Hermes::rhs(BoutReal t) {
       // Perpendicular anomalous momentum diffusion
       ddt(Vort) += FV::Div_a_Laplace_perp(anomalous_nu, DC(Vort));
     }
-
-    // Sink of vorticity due to ion-neutral friction
-    // ddt(Vort) += Sn*where(Sn, 0.0, Vort);
-    if (ion_neutral > 0.0)
-      ddt(Vort) -= ion_neutral * Vort;
     
-    if (z_hyper_viscos > 0) {
-      // Form of hyper-viscosity to suppress zig-zags in Z
-      ddt(Vort) -= z_hyper_viscos * SQ(SQ(coord->dz)) * D4DZ4(Vort);
+    if (ion_neutral > 0.0) {
+      // Sink of vorticity due to ion-neutral friction
+      ddt(Vort) -= ion_neutral * Vort;
     }
+    
     if (x_hyper_viscos > 0) {
       // Form of hyper-viscosity to suppress zig-zags in X
       ddt(Vort) -= x_hyper_viscos * D4DX4_FV_Index(Vort);
     }
-
     if (y_hyper_viscos > 0) {
       // Form of hyper-viscosity to suppress zig-zags in Y
       ddt(Vort) -= y_hyper_viscos * FV::D4DY4_Index(Vort, false);
+    }
+    if (z_hyper_viscos > 0) {
+      // Form of hyper-viscosity to suppress zig-zags in Z
+      ddt(Vort) -= z_hyper_viscos * SQ(SQ(coord->dz)) * D4DZ4(Vort);
     }
   }
 
@@ -2072,11 +2070,6 @@ int Hermes::rhs(BoutReal t) {
 
     if (numdiff > 0.0) {
       ddt(VePsi) += sqrt(mi_me) * numdiff * Div_par_diffusion_index(Ve);
-      // ddt(VePsi) += FV::Div_par_K_Grad_par(SQ(mesh->dy)*mesh->g_22*mi_me*numdiff,
-      // Ve);
-      // ddt(VePsi) -=
-      // FV::Div_par_K_Grad_par(SQ(mesh->dy)*mesh->g_22*mi_me*numdiff*coord->Bxy/NelimVe,
-      // Jpar/coord->Bxy);
     }
 
     if (hyper > 0.0) {
@@ -2133,6 +2126,7 @@ int Hermes::rhs(BoutReal t) {
     }
 
     if (ion_viscosity) {
+      TRACE("NVi:ion viscosity");
       // Poloidal flow damping
       Field2D sqrtB = sqrt(coord->Bxy);
 

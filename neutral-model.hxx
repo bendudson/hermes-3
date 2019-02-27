@@ -51,14 +51,14 @@ public:
   /*!
    *
    */
-  virtual void addDensity(int x, int y, int z, BoutReal dndt) {}
-  virtual void addPressure(int x, int y, int z, BoutReal dpdt) {}
-  virtual void addMomentum(int x, int y, int z, BoutReal dnvdt) {}
+  virtual void addDensity(int UNUSED(x), int UNUSED(y), int UNUSED(z), BoutReal UNUSED(dndt)) {}
+  virtual void addPressure(int UNUSED(x), int UNUSED(y), int UNUSED(z), BoutReal UNUSED(dpdt)) {}
+  virtual void addMomentum(int UNUSED(x), int UNUSED(y), int UNUSED(z), BoutReal UNUSED(dnvdt)) {}
   
   /*!
    * Preconditioning
    */
-  virtual void precon(BoutReal t, BoutReal gamma, BoutReal delta) {}
+  virtual void precon(BoutReal UNUSED(t), BoutReal UNUSED(gamma), BoutReal UNUSED(delta)) {}
 
   Field3D S;     // Plasma particle sink, neutral source
   Field3D Qi;    // Power transfer from ions
