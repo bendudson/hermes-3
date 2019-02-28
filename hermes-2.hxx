@@ -221,7 +221,9 @@ private:
   bool newXZsolver; 
   Laplacian *phiSolver; // Old Laplacian in X-Z
   LaplaceXZ *newSolver; // New Laplacian in X-Z
-  
+
+  // Mesh quantities
+  Field2D B32, sqrtB;
 };
 
 /// Fundamental constants

@@ -59,6 +59,7 @@ const Field3D ceil(const Field3D &var, BoutReal f, REGION rgn = RGN_ALL) {
 Field3D SQ(const Vector3D &v) { return v * v; }
 
 int Hermes::init(bool restarting) {
+  
   auto opt = Options::root();
 
   // Switches in model section
@@ -287,7 +288,7 @@ int Hermes::init(bool restarting) {
   EvolvingVars.add(Ne, Pe);
 
   if (output_ddt) {
-    SAVE_REPEAT2(ddt(Ne), ddt(Pe));
+    SAVE_REPEAT(ddt(Ne), ddt(Pe));
   }
 
   if (j_par || j_diamag) {
@@ -394,7 +395,12 @@ int Hermes::init(bool restarting) {
 
     coord->geometry(); // Calculate other metrics
   }
+  
+  sqrtB = sqrt(coord->Bxy); // B^(1/2)
+  B32 = sqrtB * coord->Bxy; // B^(3/2)
 
+  SAVE_ONCE(B32);
+  
   /////////////////////////////////////////////////////////
   // Neutral models
 
@@ -1739,8 +1745,6 @@ int Hermes::rhs(BoutReal t) {
     }
   }
 
-  Field2D B32 = sqrt(coord->Bxy) * coord->Bxy; // B^(3/2)
-
   if (ion_viscosity) {
     ///////////////////////////////////////////////////////////
     // Ion stress tensor. Split into
@@ -1768,7 +1772,7 @@ int Hermes::rhs(BoutReal t) {
         SQ((5. / 2) * Pilim) * SQ(Grad(Tifree)); // This term includes a
                                                  // parallel component which is
                                                  // cancelled in first term
-
+    
     // Perpendicular part from curvature
     Pi_ciperp =
         -0.5 * 0.96 * Pi * tau_i *
@@ -1788,14 +1792,35 @@ int Hermes::rhs(BoutReal t) {
     // Could also be written as:
     // Pi_cipar = -
     // 0.96*Pi*tau_i*2.*Grad_par(sqrt(coord->Bxy)*Vi)/sqrt(coord->Bxy);
+    
+    if (mesh->firstX()) {
+      // First cells in X subject to boundary effects.
+      for(int i=mesh->xstart; (i <= mesh->xend) && (i < 4); i++) {
+        for (int j = mesh->ystart; j <= mesh->yend; j++) {
+          for (int k = 0; k < mesh->LocalNz; k++) {
+            Pi_ciperp(i, j, k) *= float(i - mesh->xstart)/4.0;
+            Pi_cipar(i, j, k) *= float(i - mesh->xstart)/4.0;
+          }
+        }
+      }
+    }
 
     mesh->communicate(Pi_ciperp, Pi_cipar);
 
-    // Apply free boundary conditions (extrapolating)
-    Pi_ciperp.applyBoundary("free_o2");
-    Pi_cipar.applyBoundary("free_o2");
+    // Smooth Pi_ciperp along Y
+    Pi_ciperp.applyBoundary("neumann_o2");
+    Field3D Pi_ciperp_orig = copy(Pi_ciperp);
+    for (auto &i : Pi_ciperp.getRegion("RGN_NOBNDRY")) {
+      Pi_ciperp[i] = 0.5*Pi_ciperp_orig[i] + 0.25*(Pi_ciperp_orig[i.ym()] + Pi_ciperp_orig[i.yp()]);
+    }
+    mesh->communicate(Pi_ciperp);
+    
+    // Apply boundary conditions
+    Pi_ciperp.applyBoundary("neumann_o2");
+    Pi_cipar.applyBoundary("neumann_o2");
 
     Pi_ci = Pi_cipar + Pi_ciperp;
+    
   }
 
   ///////////////////////////////////////////////////////////
@@ -2128,7 +2153,6 @@ int Hermes::rhs(BoutReal t) {
     if (ion_viscosity) {
       TRACE("NVi:ion viscosity");
       // Poloidal flow damping
-      Field2D sqrtB = sqrt(coord->Bxy);
 
       // The parallel part is solved as a diffusion term
       ddt(NVi) += 1.28 * sqrtB *
@@ -2509,10 +2533,15 @@ int Hermes::rhs(BoutReal t) {
 
   if (ion_viscosity) {
     // Collisional heating due to parallel viscosity
+
+    ddt(Pi) -= (2. / 3) * Vi * 1.28 * sqrtB *
+               FV::Div_par_K_Grad_par(Pi * tau_i / (coord->Bxy), sqrtB * Vi);
+    
     if (currents) {
-      ddt(Pi) -= (2. / 3) * 0.5 * Pi_ci * Curlb_B * Grad(phi + Pi);
-      ddt(Pi) +=
-          (2. / 3) * (1. / 3) * bracket(Pi_ci, phi + Pi, BRACKET_ARAKAWA);
+      ddt(Pi) += (4. / 9) * Vi * B32 * Grad_par(Pi_ciperp / B32);
+
+      ddt(Pi) -= (2. / 6) * Pi_ci * Curlb_B * Grad(phi + Pi);
+      ddt(Pi) += (2. / 9) * bracket(Pi_ci, phi + Pi, BRACKET_ARAKAWA);
     }
   }
 
@@ -2687,11 +2716,11 @@ int Hermes::rhs(BoutReal t) {
   if (radial_buffers) {
     /// Radial buffer regions
 
-    // Calculate Z averages
-    Field2D PeDC = DC(Pe);
-    Field2D PiDC = DC(Pi);
-    Field2D NeDC = DC(Ne);
-    Field2D VortDC = DC(Vort);
+    // Calculate flux sZ averages
+    Field2D PeDC = averageY(DC(Pe));
+    Field2D PiDC = averageY(DC(Pi));
+    Field2D NeDC = averageY(DC(Ne));
+    Field2D VortDC = averageY(DC(Vort));
 
     if ((mesh->XGLOBAL(mesh->xstart) - mesh->xstart) < radial_inner_width) {
       // This processor contains points inside the inner radial boundary
@@ -2733,7 +2762,8 @@ int Hermes::rhs(BoutReal t) {
             ddt(Pi)(i, j, k) -= D * (Pi(i, j, k) - PiDC(i, j));
             ddt(Ne)(i, j, k) -= D * (Ne(i, j, k) - NeDC(i, j));
             ddt(Vort)(i, j, k) -= D * (Vort(i, j, k) - VortDC(i, j));
-
+            ddt(NVi)(i, j, k) -= D * NVi(i, j, k);
+            
             // Radial fluxes
             BoutReal f = D * (Ne(i + 1, j, k) - Ne(i, j, k));
             ddt(Ne)(i, j, k) += f * x_factor;
