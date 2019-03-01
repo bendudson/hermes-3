@@ -18,7 +18,7 @@ Released under the GPL license
 License
 =======
 
-Full text of the license is in the file LICENSE. If you are using Hermes-1,
+Full text of the license is in the file LICENSE. If you are using Hermes-2,
 please cite the relevant papers.
 
     Copyright B.Dudson, J.Leddy, University of York, September 2017-2019
