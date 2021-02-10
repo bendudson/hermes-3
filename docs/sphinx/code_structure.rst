@@ -16,9 +16,14 @@ can have values inserted and retrieved by the components. The components
 are created and then run by a scheduler, based on settings in the
 input (BOUT.inp) file.
 
-In terms of design patterns, the method used here is essentially a combination
-of the `Encapsulate Context <https://accu.org/journals/overload/12/63/kelly_246/>`
-and `Command <https://en.wikipedia.org/wiki/Command_pattern>` patterns.
+In terms of design patterns, the method used here is essentially a
+combination of the `Encapsulate Context
+<https://accu.org/journals/overload/12/63/kelly_246/>`_ and `Command
+<https://en.wikipedia.org/wiki/Command_pattern>`_ patterns.  It has
+some similarity to the `Entity-Component-System
+<https://en.wikipedia.org/wiki/Entity_component_system>`_ pattern used
+in game development, for example `EnTT
+<https://github.com/skypjack/entt>`_.
 
 Simulation state
 ----------------
