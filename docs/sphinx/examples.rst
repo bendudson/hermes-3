@@ -81,6 +81,9 @@ The `zero_current` component sets:
    \end{aligned}
 
 
+Full example `inputs on Github
+<https://github.com/bendudson/hermes-3/tree/master/examples/1D-te-ti>`_.
+
 2D drift-plane
 --------------
 
@@ -180,6 +183,9 @@ This adds the equation
 
 where :math:`L_{||}` is the connection length.
 
+Full example `inputs on Github
+<https://github.com/bendudson/hermes-3/tree/master/examples/blob2d>`_.
+
 Blob2D-Te-Ti
 ------------
 
@@ -234,6 +240,8 @@ now there are pressure equations for both ions and electrons:
    \nabla\cdot{\mathbf{j}_{sh}} =& \frac{n_e\phi}{L_{||}}
    \end{aligned}
 
+Full example `inputs on Github
+<https://github.com/bendudson/hermes-3/tree/master/examples/blob2d-te-ti>`_.
 
 2D axisymmetric tokamak
 -----------------------
@@ -292,3 +300,6 @@ Atomic reactions are specified as a list:
         ne + e -> ne+ + 2e, # Neon ionisation
         ne+ + e -> ne,      # Neon+ recombination
        )
+
+Full example `inputs on Github
+<https://github.com/bendudson/hermes-3/tree/master/examples/tokamak/recycling-dthene>`_.
