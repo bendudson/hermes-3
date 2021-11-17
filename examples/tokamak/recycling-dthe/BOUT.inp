@@ -12,15 +12,28 @@ file = "tokamak.nc"
 [mesh:paralleltransform]
 type = shifted
 
-[solver]
-mxstep = 10000
-
 [hermes]
-components = d+, d, t+, t, he+, he, e, collisions, sheath_boundary, recycling, reactions
+components = (d+, d, t+, t, he+, he, e,
+              sheath_boundary, collisions, recycling, reactions,
+              electron_force_balance)
 
-Nnorm = 2e18  # Reference density [m^-3]
-Bnorm = 1   # Reference magnetic field [T]
+Nnorm = 1e19  # Reference density [m^-3]
+Bnorm = 1     # Reference magnetic field [T]
 Tnorm = 5   # Reference temperature [eV]
+
+[solver]
+type = beuler  # Backward Euler steady-state solver
+max_nonlinear_iterations = 10
+
+diagnose = true
+
+atol = 1e-7
+rtol = 1e-5
+
+[sheath_boundary]
+
+lower_y = true
+upper_y = true
 
 ################################################################
 # Deuterium ions
@@ -176,6 +189,10 @@ species = d+, t+, he+
 type = (
         d + e -> d+ + 2e,   # Deuterium ionisation
         t + e -> t+ + 2e,   # Tritium ionisation
+        d + d+ -> d+ + d,     # Charge exchange D-D
+        t + t+ -> t+ + t,     # Charge exchange T-T
+        d + t+ -> d+ + t,     # Charge exchange D-T
+        t + d+ -> t+ + d,     # Charge exchange T-D
         he + e -> he+ + 2e, # Helium ionisation
         he+ + e -> he,      # Helium+ recombination
        )
