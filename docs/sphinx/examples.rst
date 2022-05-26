@@ -367,3 +367,76 @@ Atomic reactions are specified as a list:
         ne + e -> ne+ + 2e, # Neon ionisation
         ne+ + e -> ne,      # Neon+ recombination
        )
+
+3D linear device
+----------------
+
+Simulations in 3D cylindrical geometry, intended to model linear
+plasma devices such as the LArge Plasma Device (UCLA) or Magnum PSI
+(DIFFER).
+
+Isothermal
+~~~~~~~~~~
+
+Turbulence driven by external particle sources
+
+.. code-block:: ini
+
+   components = (e, d+, sound_speed, vorticity,
+                sheath_boundary, collisions)
+
+The electron equations are
+
+.. code-block:: ini
+
+   [e]
+   type = evolve_density, evolve_momentum, isothermal
+
+which corresponds to
+
+.. math::
+
+   \begin{aligned}
+   \frac{\partial n_e}{\partial t} =& - \nabla\cdot\left[n_e\left(\mathbf{v}_{E\times B} + \mathbf{b}v_{||e}\right)\right] \\
+   \frac{\partial}{\partial t}\left(m_en_ev_{||e}\right) =& -\nabla\cdot\left[m_en_ev_{||e} \left(\mathbf{v}_{E\times B} + \mathbf{b}v_{||e}\right)\right] \\
+   &- \partial_{||}p_e - en_eE_{||} + \underbrace{m_en_e\nu_{ei}\left(v_{||d+} - v_{||e}\right)}_{\texttt{collisions}}\\
+   p_e =& n_eT_e
+   \end{aligned}
+
+The ion equations are
+
+.. code-block:: ini
+
+   [d+]
+   type = quasineutral, evolve_momentum, isothermal
+
+which adds the following equations:
+
+.. math::
+
+   \begin{aligned}
+   n_{d+} =& n_e \\
+   \frac{\partial}{\partial t}\left(m_{d+}n_{d+}v_{||d+}\right) =& -\nabla\cdot\left[m_{d+}n_{d+}v_{||d+}\left(\mathbf{v}_{E\times B} + \mathbf{b}v_{||d+}\right)\right] \\
+   &- \partial_{||}p_{d+} + en_{d+}E_{||} + \underbrace{m_en_e\nu_{ei}\left(v_{||e} - v_{||d+}\right)}_{\texttt{collisions}} \\
+   p_{d+} =& n_{d+}T_{d+}
+   \end{aligned}
+
+The vorticity equation doesn't include diamagnetic terms because
+the magnetic field is constant:
+
+.. math::
+
+   \begin{aligned}
+   \frac{\partial \omega}{\partial t} =& - \nabla\cdot\left(\omega\mathbf{v}_{E\times B}\right) + \nabla\cdot\left(n_{d+}v_{||d+} - n_ev_{||e}\right) \\
+   \nabla\cdot\left(\frac{\overline{m_i}\overline{n}}{B^2}\nabla_\perp\phi\right) =& \omega
+   \end{aligned}
+
+.. figure:: figs/Ne_crossection.png
+   :name: linear-ne-crossection.png
+   :alt:
+   :width: 100%
+
+.. figure:: figs/Ne_2_8_0_timeseries.png
+   :name: linear-ne-crossection.png
+   :alt:
+   :width: 100%
