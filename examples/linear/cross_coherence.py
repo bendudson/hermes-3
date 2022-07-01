@@ -11,9 +11,9 @@ def cross_coherence(signal1, signal2):
     norm2 = ((signal2 - np.mean(signal2)) / np.std(signal2)).flatten()
 
     # Make a 2D histogram
-    nbins = np.sqrt(len(signal1))
+    nbins = int(len(signal1)**(1./4) + 0.5)
 
-    return np.histogram2d(norm1, norm2, density=True)
+    return np.histogram2d(norm1, norm2, bins=nbins, density=True, range=[[-2, 2], [-2, 2]])
 
 def plot_cross_coherence(signal1, signal2, axis=None):
     """ Make a 2D cross-coherence plot of two signals
@@ -32,10 +32,16 @@ def plot_cross_coherence(signal1, signal2, axis=None):
     hist, xedges, yedges = cross_coherence(signal1, signal2)
 
     if axis is None:
-        fig = plt.figure()
-        axis = fig.add_subplot(132, aspect='equal')
+        fig, axis = plt.subplots()
+
+    axis.set_aspect("equal")
     X, Y = np.meshgrid(xedges, yedges)
     axis.pcolormesh(X, Y, hist)
+
+    Xc, Yc = np.meshgrid(0.5*(xedges[0:-1] + xedges[1:]), 0.5*(yedges[0:-1] + yedges[1:]))
+    histmax = np.max(hist)
+    axis.contour(Xc, Yc, hist, levels=[0.3*histmax, 0.5*histmax, 0.8*histmax])
+
     axis.axvline(0.0, linestyle='--', color='k')
     axis.axhline(0.0, linestyle='--', color='k')
 
@@ -74,18 +80,17 @@ if __name__ == "__main__":
     
     # Read data
     from boutdata import collect
-    pe = collect("pe", path=path, tind=tind, xind=xind)
+    n = collect("ne", path=path, tind=tind, xind=xind)
     phi = collect("phi", path=path, tind=tind, xind=xind)
 
     # Average Z direction to get profiles
-    nt, nx, ny, nz = n.shape
-    
-    pac, pdc = acdc(pe)
+    nac, ndc = acdc(n)
     phiac, phidc = acdc(phi)
     
-    plot_cross_coherence(phiac, nac)
+    plot_cross_coherence(phiac.flatten(), nac.flatten())
     plt.xlabel(r"$A\left(\phi\right)/\sigma$")
-    plt.ylabel(r"$A\left(p_e\right)/\sigma$")
+    plt.ylabel(r"$A\left(n_e\right)/\sigma$")
+    plt.title("Cross coherence")
 
     plt.savefig("cross_coherence.png")
     plt.savefig("cross_coherence.pdf")
