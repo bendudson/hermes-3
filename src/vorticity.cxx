@@ -38,6 +38,11 @@ Vorticity::Vorticity(std::string name, Options &alloptions, Solver *solver) {
           .doc("Include diamagnetic drift in polarisation current?")
           .withDefault<bool>(true);
 
+  boussinesq =
+      options["boussinesq"]
+          .doc("Use 'Boussinesq' approximation?")
+          .withDefault<bool>(true);
+
   collisional_friction =
     options["collisional_friction"]
     .doc("Damp vorticity based on mass-weighted collision frequency")
@@ -99,8 +104,15 @@ Vorticity::Vorticity(std::string name, Options &alloptions, Solver *solver) {
     laplacexy->setCoefs(average_atomic_mass / SQ(coord->Bxy), 0.0);
   }
   phiSolver = Laplacian::create(&options["laplacian"]);
-  // Set coefficients for Boussinesq solve
-  phiSolver->setCoefC(average_atomic_mass / SQ(coord->Bxy));
+  if (boussinesq) {
+    // Set coefficients for Boussinesq solve
+    phiSolver->setCoefC(average_atomic_mass / SQ(coord->Bxy));
+  } else {
+    if (not phiSolver->uses3DCoefs()) {
+      throw BoutException("Non-Boussinesq solve requires phiSolver to support 3D "
+                          "coefficients.");
+    }
+  }
   
   if (phi_boundary_relax) {
     // Set the last update time to -1, so it will reset
@@ -175,6 +187,7 @@ void Vorticity::transform(Options &state) {
   AUTO_TRACE();
 
   auto& fields = state["fields"];
+  auto& allspecies = state["species"];
 
   // Set the boundary of phi. Both 2D and 3D fields are kept, though the 3D field
   // is constant in Z. This is for efficiency, to reduce the number of conversions.
@@ -184,7 +197,6 @@ void Vorticity::transform(Options &state) {
   if (diamagnetic_polarisation) {
     // Diamagnetic term in vorticity. Note this is weighted by the mass
     // This includes all species, including electrons
-    Options& allspecies = state["species"];
     for (auto& kv : allspecies.getChildren()) {
       Options& species = allspecies[kv.first]; // Note: need non-const
 
@@ -336,60 +348,121 @@ void Vorticity::transform(Options &state) {
     }
   }
 
-  // Update boundary conditions. Two issues:
-  // 1) Solving here for phi + Pi, and then subtracting Pi from the result
-  //    The boundary values should therefore include Pi
-  // 2) The INVERT_SET flag takes the value in the guard (boundary) cell
-  //    and sets the boundary between cells to this value.
-  //    This shift by 1/2 grid cell is important.
+  if (boussinesq) {
+    // Update boundary conditions. Two issues:
+    // 1) Solving here for phi + Pi, and then subtracting Pi from the result
+    //    The boundary values should therefore include Pi
+    // 2) The INVERT_SET flag takes the value in the guard (boundary) cell
+    //    and sets the boundary between cells to this value.
+    //    This shift by 1/2 grid cell is important.
 
-  Field3D phi_plus_pi = phi + Pi_sum;
+    Field3D phi_plus_pi = phi + Pi_sum;
 
-  if (mesh->firstX()) {
-    for (int j = mesh->ystart; j <= mesh->yend; j++) {
-      for (int k = 0; k < mesh->LocalNz; k++) {
-        // Average phi + Pi at the boundary, and set the boundary cell
-        // to this value. The phi solver will then put the value back
-        // onto the cell mid-point
-        phi_plus_pi(mesh->xstart - 1, j, k) =
-          0.5
-          * (phi_plus_pi(mesh->xstart - 1, j, k) +
-             phi_plus_pi(mesh->xstart, j, k));
+    if (mesh->firstX()) {
+      for (int j = mesh->ystart; j <= mesh->yend; j++) {
+        for (int k = 0; k < mesh->LocalNz; k++) {
+          // Average phi + Pi at the boundary, and set the boundary cell
+          // to this value. The phi solver will then put the value back
+          // onto the cell mid-point
+          phi_plus_pi(mesh->xstart - 1, j, k) =
+            0.5
+            * (phi_plus_pi(mesh->xstart - 1, j, k) +
+               phi_plus_pi(mesh->xstart, j, k));
+        }
       }
     }
-  }
 
-  if (mesh->lastX()) {
-    for (int j = mesh->ystart; j <= mesh->yend; j++) {
-      for (int k = 0; k < mesh->LocalNz; k++) {
-        phi_plus_pi(mesh->xend + 1, j, k) =
-          0.5
-          * (phi_plus_pi(mesh->xend + 1, j, k) +
-             phi_plus_pi(mesh->xend, j, k));
+    if (mesh->lastX()) {
+      for (int j = mesh->ystart; j <= mesh->yend; j++) {
+        for (int k = 0; k < mesh->LocalNz; k++) {
+          phi_plus_pi(mesh->xend + 1, j, k) =
+            0.5
+            * (phi_plus_pi(mesh->xend + 1, j, k) +
+               phi_plus_pi(mesh->xend, j, k));
+        }
       }
     }
-  }
 
-  // Calculate potential
-  if (split_n0) {
-    ////////////////////////////////////////////
-    // Split into axisymmetric and non-axisymmetric components
-    Field2D Vort2D = DC(Vort); // n=0 component
-    Field2D phi_plus_pi_2d = DC(phi_plus_pi);
-    phi_plus_pi -= phi_plus_pi_2d;
+    // Calculate potential
+    if (split_n0) {
+      ////////////////////////////////////////////
+      // Split into axisymmetric and non-axisymmetric components
+      Field2D Vort2D = DC(Vort); // n=0 component
+      Field2D phi_plus_pi_2d = DC(phi_plus_pi);
+      phi_plus_pi -= phi_plus_pi_2d;
 
-    phi_plus_pi_2d = laplacexy->solve(Vort2D, phi_plus_pi_2d);
+      phi_plus_pi_2d = laplacexy->solve(Vort2D, phi_plus_pi_2d);
 
-    // Solve non-axisymmetric part using X-Z solver
-    phi = phi_plus_pi_2d
-      + phiSolver->solve((Vort - Vort2D) * (Bsq / average_atomic_mass),
-                         phi_plus_pi)
-      - Pi_sum;
+      // Solve non-axisymmetric part using X-Z solver
+      phi = phi_plus_pi_2d
+        + phiSolver->solve((Vort - Vort2D) * (Bsq / average_atomic_mass), phi_plus_pi)
+        - Pi_sum;
 
+    } else {
+      phi = phiSolver->solve(Vort * (Bsq / average_atomic_mass),
+          phi_plus_pi)
+        - Pi_sum;
+    }
   } else {
-    phi = phiSolver->solve(Vort * (Bsq / average_atomic_mass),
-                           phi_plus_pi)
-      - Pi_sum;
+    // If non-Boussinesq, subtract Pi contribution to Vort first, then solve for phi, not
+    // phi_plus_pi.
+    // Need to do this way (subtract Div(B^-2 Grad_perp(pi)) from rhs) for non-Boussinesq
+    // solve, as coefficients of Grad_perp(phi) and Grad_perp(Pi) terms are not the same
+    // in non-Boussinesq vorticity
+
+    if (split_n0) {
+      throw BoutException("split_n0 not implemented (yet?) for non-Boussinesq case");
+    }
+
+    // Update boundary conditions.
+    // The INVERT_SET flag takes the value in the guard (boundary) cell and sets the
+    // boundary between cells to this value.  This shift by 1/2 grid cell is
+    // important.
+
+    Field3D phi_boundary = copy(phi);
+    if (mesh->firstX()) {
+      for (int j = mesh->ystart; j <= mesh->yend; j++) {
+        for (int k = 0; k < mesh->LocalNz; k++) {
+          // Average phi + Pi at the boundary, and set the boundary cell
+          // to this value. The phi solver will then put the value back
+          // onto the cell mid-point
+          phi_boundary(mesh->xstart - 1, j, k) =
+              0.5
+              * (phi_boundary(mesh->xstart - 1, j, k) +
+                 phi_boundary(mesh->xstart, j, k));
+        }
+      }
+    }
+
+    if (mesh->lastX()) {
+      for (int j = mesh->ystart; j <= mesh->yend; j++) {
+        for (int k = 0; k < mesh->LocalNz; k++) {
+          phi_boundary(mesh->xend + 1, j, k) =
+              0.5
+              * (phi_boundary(mesh->xend + 1, j, k) +
+                 phi_boundary(mesh->xend, j, k));
+        }
+      }
+    }
+
+    N_sum = 0.0;
+    for (auto& kv : allspecies.getChildren()) {
+      Options& species = allspecies[kv.first]; // Note: need non-const
+
+      if (!(IS_SET_NOBOUNDARY(species["density"]) and
+            species.isSet("charge") and species.isSet("AA"))) {
+        continue; // No density, charge or mass -> no polarisation current
+      }
+      auto N = GET_NOBOUNDARY(Field3D, species["density"]);
+      N_sum += N;
+    }
+    N_sum.applyBoundary("neumann");
+    auto n_B2 = N_sum/Bsq;
+    phiSolver->setCoefC(n_B2); // Set when initialised
+    // phi_boundary here is equivalent to withBoundary(phi, phi_boundary) because
+    // of the way phi_boundary is initialised
+    phi = phiSolver->solve((Vort - FV::Div_a_Laplace_perp(1/Bsq,Pi_sum))/n_B2,
+        phi_boundary);
   }
 
   // Ensure that potential is set in the communication guard cells
@@ -464,8 +537,14 @@ void Vorticity::transform(Options &state) {
         auto P = GET_NOBOUNDARY(Field3D, species["pressure"]);
         auto AA = get<BoutReal>(species["AA"]);
         
-        add(species["energy_source"],
-            (3./2) * P * (AA / average_atomic_mass) * DivJdia);
+        if (boussinesq) {
+          add(species["energy_source"],
+              (3./2) * P * (AA / average_atomic_mass) * DivJdia);
+        } else {
+          auto N = GET_NOBOUNDARY(Field3D, species["density"]);
+          add(species["energy_source"],
+              (3./2) * P / N * (AA / average_atomic_mass) * DivJdia);
+        }
       }
     }
 
@@ -520,23 +599,41 @@ void Vorticity::finally(const Options &state) {
   phi = get<Field3D>(state["fields"]["phi"]);
 
   if (exb_advection) {
-    ddt(Vort) -= Div_n_bxGrad_f_B_XPPM(Vort, phi, bndry_flux, poloidal_flows);
-
-    /*
+    if (boussinesq) {
+      // For now, use simplified version of ExB advection terms for Boussinesq case
+      ddt(Vort) -= Div_n_bxGrad_f_B_XPPM(Vort, phi, bndry_flux, poloidal_flows);
+    } else {
       ddt(Vort) -=
         Div_n_bxGrad_f_B_XPPM(0.5 * Vort, phi, bndry_flux, poloidal_flows);
 
-    // V_ExB dot Grad(Pi)
-    Field3D vEdotGradPi = bracket(phi, Pi, BRACKET_ARAKAWA);
-    vEdotGradPi.applyBoundary("free_o2");
-    // delp2(phi) term
-    Field3D DelpPhi_2B2 = 0.5 * Delp2(phi) / Bsq;
-    DelpPhi_2B2.applyBoundary("free_o2");
-    
-    mesh->communicate(vEdotGradPi, DelpPhi_2B2);
-    
-    ddt(Vort) -= FV::Div_a_Laplace_perp(0.5 / Bsq, vEdotGradPi);
-    */
+      // V_ExB dot Grad(Pi_sum)
+      Field3D vEdotGradPi = bracket(phi, Pi_sum, BRACKET_ARAKAWA);
+      vEdotGradPi.applyBoundary("free_o2");
+      // delp2(phi) term
+      Field3D DelpPhi_2B2 = 0.5 * Delp2(phi) / Bsq;
+      DelpPhi_2B2.applyBoundary("free_o2");
+
+      mesh->communicate(vEdotGradPi, DelpPhi_2B2);
+
+      ddt(Vort) -= FV::Div_a_Laplace_perp(0.5 / Bsq, vEdotGradPi);
+
+      if (boussinesq) {
+        ddt(Vort) -= Div_n_bxGrad_f_B_XPPM(DelpPhi_2B2, phi + Pi_sum, bndry_flux,
+                                           poloidal_flows);
+      } else {
+	ddt(Vort) -= Div_n_bxGrad_f_B_XPPM(N_sum*DelpPhi_2B2, phi, bndry_flux,
+					   poloidal_flows);
+	ddt(Vort) -= Div_n_bxGrad_f_B_XPPM(DelpPhi_2B2, Pi_sum, bndry_flux,
+					   poloidal_flows);
+
+        // V_ExB dot Grad(n)
+        Field3D vEdotGradN = bracket(phi, N_sum, BRACKET_ARAKAWA);
+        vEdotGradN.applyBoundary("free_o2");
+        mesh->communicate(vEdotGradN);
+
+        ddt(Vort) += FV::Div_a_Laplace_perp(0.5 * vEdotGradN / Bsq, phi);
+      }
+    }
   }
   
   if (state.isSection("fields") and state["fields"].isSet("DivJextra")) {
