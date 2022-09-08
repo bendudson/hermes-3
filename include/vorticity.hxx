@@ -62,7 +62,10 @@ private:
   bool diamagnetic; // Include diamagnetic current?
   bool diamagnetic_polarisation; // Include diamagnetic drift in polarisation current
   bool boussinesq; // Use 'Boussinesq' approximation?
-  BoutReal average_atomic_mass; // Weighted average atomic mass, for polarisaion current (Boussinesq approximation)
+
+  /// Weighted average atomic mass, for polarisaion current (Boussinesq approximation)
+  /// If boussinesq = false then average_atomic_mass = 1
+  BoutReal average_atomic_mass;
   bool poloidal_flows;   ///< Include poloidal ExB flow?
   bool bndry_flux;  ///< Allow flows through radial boundaries?
 
@@ -85,7 +88,10 @@ private:
   BoutReal hyper_z; ///< Hyper-viscosity in Z
 
   // Intermediate variables to carry between transform() and finally()
-  Field3D N_sum, Pi_sum;
+  /// Sum of N * (AA / average_atomic_mass)
+  Field3D N_sum;
+  /// Sum of P * (AA / average_atomic_mass)
+  Field3D Pi_sum;
 
   // Diagnostic outputs
   Field3D DivJdia, DivJcol; // Divergence of diamagnetic and collisional current

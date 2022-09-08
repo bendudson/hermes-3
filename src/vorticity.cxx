@@ -47,12 +47,16 @@ Vorticity::Vorticity(std::string name, Options &alloptions, Solver *solver) {
     options["collisional_friction"]
     .doc("Damp vorticity based on mass-weighted collision frequency")
     .withDefault<bool>(false);
+  if (boussinesq) {
+    // Use an average atomic mass rather than summed mass density
+    average_atomic_mass = options["average_atomic_mass"]
+      .doc("Weighted average atomic mass, for polarisaion current "
+           "(Boussinesq approximation)")
+      .withDefault<BoutReal>(2.0); // Deuterium
+  } else {
+    average_atomic_mass = 1.0;
+  }
 
-  average_atomic_mass =
-      options["average_atomic_mass"]
-          .doc("Weighted average atomic mass, for polarisaion current "
-               "(Boussinesq approximation)")
-          .withDefault<BoutReal>(2.0); // Deuterium
 
   bndry_flux = options["bndry_flux"]
                    .doc("Allow flows through radial boundaries")
@@ -193,7 +197,7 @@ void Vorticity::transform(Options &state) {
   // is constant in Z. This is for efficiency, to reduce the number of conversions.
   // Note: For now the boundary values are all at the midpoint,
   //       and only phi is considered, not phi + Pi which is handled in Boussinesq solves
-  Field3D Pi_sum = 0.0; ///< Contribution from ion pressure, weighted by atomic mass
+  Pi_sum = 0.0; ///< Contribution from ion pressure, weighted by atomic mass
   if (diamagnetic_polarisation) {
     // Diamagnetic term in vorticity. Note this is weighted by the mass
     // This includes all species, including electrons
