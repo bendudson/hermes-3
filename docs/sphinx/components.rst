@@ -981,17 +981,17 @@ fields.
 vorticity
 ~~~~~~~~~
 
-Evolves a vorticity equation, and at each call to transform() uses a matrix
+Evolves a vorticity equation, and at each call to ``transform()`` uses a matrix
 inversion to calculate potential from vorticity.
 
 In this component the Boussinesq approximation is made, so the vorticity equation solved is
 
 .. math::
 
-   \nabla\cdot\left(\frac{\overline{A}\overline{n}}{B^2}\nabla_\perp \phi + \sum_i\frac{A_i}{B^2}\nabla_\perp p_i\right) = \Omega
+   \nabla\cdot\left(\frac{\bar{A}\bar{n}}{B^2}\nabla_\perp \phi + \sum_i\frac{A_i}{B^2}\nabla_\perp p_i\right) = \Omega
 
-Where the sum is over species, :math:`\overline{A}` is the average ion
-atomic number, and :math:`\overline{n}` is the normalisation density
+Where the sum is over species, :math:`\bar{A}` is the average ion
+atomic number, and :math:`\bar{n}` is the normalisation density
 (i.e. goes to 1 in the normalised equations).  This is a simplified
 version of the full expression which is:
 
@@ -1003,7 +1003,7 @@ and is derived by replacing
 
 .. math::
 
-   \sum_i A_i n_i \rightarrow \overline{A}\overline{n}
+   \sum_i A_i n_i \rightarrow \bar{A}\bar{n}
 
 .. doxygenstruct:: Vorticity
    :members:
