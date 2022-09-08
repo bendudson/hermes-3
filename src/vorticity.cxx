@@ -435,6 +435,8 @@ void Vorticity::transform(Options& state) {
       }
     }
 
+    // The total mass density of species
+    // which contribute to polarisation current
     N_sum = 0.0;
     for (auto& kv : allspecies.getChildren()) {
       Options& species = allspecies[kv.first]; // Note: need non-const
@@ -443,8 +445,13 @@ void Vorticity::transform(Options& state) {
             and species.isSet("AA"))) {
         continue; // No density, charge or mass -> no polarisation current
       }
-      auto N = GET_NOBOUNDARY(Field3D, species["density"]);
-      N_sum += N;
+      if (fabs(get<BoutReal>(species["charge"])) < 1e-5) {
+        continue; // Zero charge
+      }
+
+      const auto A = get<BoutReal>(species["AA"]);
+      const auto N = GET_NOBOUNDARY(Field3D, species["density"]);
+      N_sum += N * (A / average_atomic_mass);
     }
     N_sum.applyBoundary("neumann");
     auto nmi_B2 = N_sum / Bsq;
@@ -541,7 +548,7 @@ void Vorticity::transform(Options& state) {
         } else {
           auto N = GET_NOBOUNDARY(Field3D, species["density"]);
           add(species["energy_source"],
-              (3./2) * P / N * (AA / average_atomic_mass) * DivJdia);
+              (3. / 2) * P / N_sum * (AA / average_atomic_mass) * DivJdia);
         }
       }
     }
@@ -612,7 +619,7 @@ void Vorticity::finally(const Options& state) {
 
       mesh->communicate(vEdotGradPi, DelpPhi_2B2);
 
-      ddt(Vort) -= FV::Div_a_Laplace_perp(0.5 / Bsq, vEdotGradPi);
+      ddt(Vort) -= FV::Div_a_Grad_perp(0.5 / Bsq, vEdotGradPi);
 
       if (boussinesq) {
         ddt(Vort) -=
@@ -628,7 +635,7 @@ void Vorticity::finally(const Options& state) {
         vEdotGradN.applyBoundary("free_o2");
         mesh->communicate(vEdotGradN);
 
-        ddt(Vort) += FV::Div_a_Laplace_perp(0.5 * vEdotGradN / Bsq, phi);
+        ddt(Vort) += FV::Div_a_Grad_perp(0.5 * vEdotGradN / Bsq, phi);
       }
     }
   }
