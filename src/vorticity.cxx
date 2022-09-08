@@ -2,51 +2,44 @@
 #include "../include/vorticity.hxx"
 #include "../include/div_ops.hxx"
 
-#include <bout/fv_ops.hxx>
-#include <invert_laplace.hxx>
-#include <bout/invert/laplacexy.hxx>
 #include <bout/constants.hxx>
-#include <difops.hxx>
+#include <bout/fv_ops.hxx>
+#include <bout/invert/laplacexy.hxx>
 #include <derivs.hxx>
+#include <difops.hxx>
+#include <invert_laplace.hxx>
 
 using bout::globals::mesh;
 
-Vorticity::Vorticity(std::string name, Options &alloptions, Solver *solver) {
+Vorticity::Vorticity(std::string name, Options& alloptions, Solver* solver) {
   AUTO_TRACE();
-  
+
   solver->add(Vort, "Vort");
 
   SAVE_REPEAT(phi);
-  
+
   auto& options = alloptions[name];
 
   exb_advection = options["exb_advection"]
                       .doc("Include ExB advection (nonlinear term)?")
                       .withDefault<bool>(true);
 
-  diamagnetic = options["diamagnetic"]
-                    .doc("Include diamagnetic current?")
-                    .withDefault<bool>(true);
+  diamagnetic =
+      options["diamagnetic"].doc("Include diamagnetic current?").withDefault<bool>(true);
 
-  sheath_boundary =
-      options["sheath_boundary"]
-          .doc("Set potential to j=0 sheath at boundaries? (default = 0)")
-          .withDefault<bool>(false);
+  sheath_boundary = options["sheath_boundary"]
+                        .doc("Set potential to j=0 sheath at boundaries? (default = 0)")
+                        .withDefault<bool>(false);
 
   diamagnetic_polarisation =
       options["diamagnetic_polarisation"]
           .doc("Include diamagnetic drift in polarisation current?")
           .withDefault<bool>(true);
 
-  boussinesq =
-      options["boussinesq"]
-          .doc("Use 'Boussinesq' approximation?")
-          .withDefault<bool>(true);
+  boussinesq = options["boussinesq"]
+                   .doc("Use 'Boussinesq' approximation?")
+                   .withDefault<bool>(true);
 
-  collisional_friction =
-    options["collisional_friction"]
-    .doc("Damp vorticity based on mass-weighted collision frequency")
-    .withDefault<bool>(false);
   if (boussinesq) {
     // Use an average atomic mass rather than summed mass density
     average_atomic_mass = options["average_atomic_mass"]
@@ -57,22 +50,23 @@ Vorticity::Vorticity(std::string name, Options &alloptions, Solver *solver) {
     average_atomic_mass = 1.0;
   }
 
+  collisional_friction =
+      options["collisional_friction"]
+          .doc("Damp vorticity based on mass-weighted collision frequency")
+          .withDefault<bool>(false);
 
   bndry_flux = options["bndry_flux"]
                    .doc("Allow flows through radial boundaries")
                    .withDefault<bool>(true);
 
-  poloidal_flows = options["poloidal_flows"]
-                       .doc("Include poloidal ExB flow")
-                       .withDefault<bool>(true);
+  poloidal_flows =
+      options["poloidal_flows"].doc("Include poloidal ExB flow").withDefault<bool>(true);
 
   split_n0 = options["split_n0"]
                  .doc("Split phi into n=0 and n!=0 components")
                  .withDefault<bool>(false);
 
-  hyper_z = options["hyper_z"]
-    .doc("Hyper-viscosity in Z. < 0 -> off")
-    .withDefault(-1.0);
+  hyper_z = options["hyper_z"].doc("Hyper-viscosity in Z. < 0 -> off").withDefault(-1.0);
 
   // Numerical dissipation terms
   // These are required to suppress parallel zig-zags in
@@ -80,16 +74,16 @@ Vorticity::Vorticity(std::string name, Options &alloptions, Solver *solver) {
   // parallel currents
 
   vort_dissipation = options["vort_dissipation"]
-    .doc("Parallel dissipation of vorticity")
-    .withDefault<bool>(false);
+                         .doc("Parallel dissipation of vorticity")
+                         .withDefault<bool>(false);
 
   phi_dissipation = options["phi_dissipation"]
-    .doc("Parallel dissipation of potential [Recommended]")
-    .withDefault<bool>(true);
+                        .doc("Parallel dissipation of potential [Recommended]")
+                        .withDefault<bool>(true);
 
   phi_boundary_relax = options["phi_boundary_relax"]
-    .doc("Relax x boundaries of phi towards Neumann?")
-    .withDefault<bool>(false);
+                           .doc("Relax x boundaries of phi towards Neumann?")
+                           .withDefault<bool>(false);
 
   // Add phi to restart files so that the value in the boundaries
   // is restored on restart. This is done even when phi is not evolving,
@@ -117,16 +111,16 @@ Vorticity::Vorticity(std::string name, Options &alloptions, Solver *solver) {
                           "coefficients.");
     }
   }
-  
+
   if (phi_boundary_relax) {
     // Set the last update time to -1, so it will reset
     // the first time RHS function is called
     phi_boundary_last_update = -1.;
 
     phi_boundary_timescale = options["phi_boundary_timescale"]
-      .doc("Timescale for phi boundary relaxation [seconds]")
-      .withDefault(1e-4)
-      / get<BoutReal>(alloptions["units"]["seconds"]);
+                                 .doc("Timescale for phi boundary relaxation [seconds]")
+                                 .withDefault(1e-4)
+                             / get<BoutReal>(alloptions["units"]["seconds"]);
     // Normalise to internal time units
 
     phiSolver->setInnerBoundaryFlags(INVERT_SET);
@@ -137,15 +131,15 @@ Vorticity::Vorticity(std::string name, Options &alloptions, Solver *solver) {
   try {
     Curlb_B.covariant = false; // Contravariant
     mesh->get(Curlb_B, "bxcv");
-  
-  } catch (BoutException &e) {
+
+  } catch (BoutException& e) {
     try {
       // May be 2D, reading as 3D
       Vector2D curv2d;
       curv2d.covariant = false;
       mesh->get(curv2d, "bxcv");
       Curlb_B = curv2d;
-    } catch (BoutException &e) {
+    } catch (BoutException& e) {
       if (diamagnetic) {
         // Need curvature
         throw;
@@ -156,22 +150,23 @@ Vorticity::Vorticity(std::string name, Options &alloptions, Solver *solver) {
     }
   }
 
-  if (Options::root()["mesh"]["paralleltransform"]["type"].as<std::string>() == "shifted") {
+  if (Options::root()["mesh"]["paralleltransform"]["type"].as<std::string>()
+      == "shifted") {
     Field2D I;
     mesh->get(I, "sinty");
     Curlb_B.z += I * Curlb_B.x;
   }
-  
+
   Options& units = alloptions["units"];
   BoutReal Bnorm = units["Tesla"];
   BoutReal Lnorm = units["meters"];
-  
+
   Curlb_B.x /= Bnorm;
   Curlb_B.y *= SQ(Lnorm);
   Curlb_B.z *= SQ(Lnorm);
 
   Curlb_B *= 2. / coord->Bxy;
-  
+
   Bsq = SQ(coord->Bxy);
 
   if (options["diagnose"]
@@ -187,7 +182,7 @@ Vorticity::Vorticity(std::string name, Options &alloptions, Solver *solver) {
   }
 }
 
-void Vorticity::transform(Options &state) {
+void Vorticity::transform(Options& state) {
   AUTO_TRACE();
 
   auto& fields = state["fields"];
@@ -204,8 +199,8 @@ void Vorticity::transform(Options &state) {
     for (auto& kv : allspecies.getChildren()) {
       Options& species = allspecies[kv.first]; // Note: need non-const
 
-      if (!(IS_SET_NOBOUNDARY(species["pressure"]) and
-            species.isSet("charge") and species.isSet("AA"))) {
+      if (!(IS_SET_NOBOUNDARY(species["pressure"]) and species.isSet("charge")
+            and species.isSet("AA"))) {
         continue; // No pressure, charge or mass -> no polarisation current
       }
 
@@ -228,7 +223,7 @@ void Vorticity::transform(Options &state) {
     if (phi_boundary_last_update < 0.0) {
       // First time this has been called.
       phi_boundary_last_update = time;
-      
+
     } else if (time > phi_boundary_last_update) {
       // Only update if time has advanced
       // Uses an exponential decay of the weighting of the value in the boundary
@@ -246,15 +241,14 @@ void Vorticity::transform(Options &state) {
 
           // Old value of phi at boundary
           BoutReal oldvalue =
-            0.5 * (phi(mesh->xstart - 1, j, 0) + phi(mesh->xstart, j, 0));
+              0.5 * (phi(mesh->xstart - 1, j, 0) + phi(mesh->xstart, j, 0));
 
           // New value of phi at boundary, relaxing towards phivalue
-          BoutReal newvalue =
-            weight * oldvalue + (1. - weight) * phivalue;
+          BoutReal newvalue = weight * oldvalue + (1. - weight) * phivalue;
 
           // Set phi at the boundary to this value
           for (int k = 0; k < mesh->LocalNz; k++) {
-            phi(mesh->xstart - 1, j, k) = 2.*newvalue - phi(mesh->xstart, j, k);
+            phi(mesh->xstart - 1, j, k) = 2. * newvalue - phi(mesh->xstart, j, k);
 
             // Note: This seems to make a difference, but don't know why.
             // Without this, get convergence failures with no apparent instability
@@ -280,7 +274,7 @@ void Vorticity::transform(Options &state) {
 
           // Set phi at the boundary to this value
           for (int k = 0; k < mesh->LocalNz; k++) {
-            phi(mesh->xend + 1, j, k) = 2.*newvalue - phi(mesh->xend, j, k);
+            phi(mesh->xend + 1, j, k) = 2. * newvalue - phi(mesh->xend, j, k);
 
             // Note: This seems to make a difference, but don't know why.
             // Without this, get convergence failures with no apparent instability
@@ -369,9 +363,8 @@ void Vorticity::transform(Options &state) {
           // to this value. The phi solver will then put the value back
           // onto the cell mid-point
           phi_plus_pi(mesh->xstart - 1, j, k) =
-            0.5
-            * (phi_plus_pi(mesh->xstart - 1, j, k) +
-               phi_plus_pi(mesh->xstart, j, k));
+              0.5
+              * (phi_plus_pi(mesh->xstart - 1, j, k) + phi_plus_pi(mesh->xstart, j, k));
         }
       }
     }
@@ -380,9 +373,7 @@ void Vorticity::transform(Options &state) {
       for (int j = mesh->ystart; j <= mesh->yend; j++) {
         for (int k = 0; k < mesh->LocalNz; k++) {
           phi_plus_pi(mesh->xend + 1, j, k) =
-            0.5
-            * (phi_plus_pi(mesh->xend + 1, j, k) +
-               phi_plus_pi(mesh->xend, j, k));
+              0.5 * (phi_plus_pi(mesh->xend + 1, j, k) + phi_plus_pi(mesh->xend, j, k));
         }
       }
     }
@@ -399,13 +390,11 @@ void Vorticity::transform(Options &state) {
 
       // Solve non-axisymmetric part using X-Z solver
       phi = phi_plus_pi_2d
-        + phiSolver->solve((Vort - Vort2D) * (Bsq / average_atomic_mass), phi_plus_pi)
-        - Pi_sum;
+            + phiSolver->solve((Vort - Vort2D) * (Bsq / average_atomic_mass), phi_plus_pi)
+            - Pi_sum;
 
     } else {
-      phi = phiSolver->solve(Vort * (Bsq / average_atomic_mass),
-          phi_plus_pi)
-        - Pi_sum;
+      phi = phiSolver->solve(Vort * (Bsq / average_atomic_mass), phi_plus_pi) - Pi_sum;
     }
   } else {
     // If non-Boussinesq, subtract Pi contribution to Vort first, then solve for phi, not
@@ -432,8 +421,7 @@ void Vorticity::transform(Options &state) {
           // onto the cell mid-point
           phi_boundary(mesh->xstart - 1, j, k) =
               0.5
-              * (phi_boundary(mesh->xstart - 1, j, k) +
-                 phi_boundary(mesh->xstart, j, k));
+              * (phi_boundary(mesh->xstart - 1, j, k) + phi_boundary(mesh->xstart, j, k));
         }
       }
     }
@@ -442,9 +430,7 @@ void Vorticity::transform(Options &state) {
       for (int j = mesh->ystart; j <= mesh->yend; j++) {
         for (int k = 0; k < mesh->LocalNz; k++) {
           phi_boundary(mesh->xend + 1, j, k) =
-              0.5
-              * (phi_boundary(mesh->xend + 1, j, k) +
-                 phi_boundary(mesh->xend, j, k));
+              0.5 * (phi_boundary(mesh->xend + 1, j, k) + phi_boundary(mesh->xend, j, k));
         }
       }
     }
@@ -453,19 +439,23 @@ void Vorticity::transform(Options &state) {
     for (auto& kv : allspecies.getChildren()) {
       Options& species = allspecies[kv.first]; // Note: need non-const
 
-      if (!(IS_SET_NOBOUNDARY(species["density"]) and
-            species.isSet("charge") and species.isSet("AA"))) {
+      if (!(IS_SET_NOBOUNDARY(species["density"]) and species.isSet("charge")
+            and species.isSet("AA"))) {
         continue; // No density, charge or mass -> no polarisation current
       }
       auto N = GET_NOBOUNDARY(Field3D, species["density"]);
       N_sum += N;
     }
     N_sum.applyBoundary("neumann");
-    auto n_B2 = N_sum/Bsq;
-    phiSolver->setCoefC(n_B2); // Set when initialised
-    // phi_boundary here is equivalent to withBoundary(phi, phi_boundary) because
-    // of the way phi_boundary is initialised
-    phi = phiSolver->solve((Vort - FV::Div_a_Laplace_perp(1/Bsq,Pi_sum))/n_B2,
+    auto nmi_B2 = N_sum / Bsq;
+    phiSolver->setCoefC(nmi_B2); // Set when initialised
+
+    // Notes:
+    // - phi_boundary here is equivalent to withBoundary(phi, phi_boundary)
+    //   because of the way phi_boundary is initialised
+    // - average_atomic_mass appears because Pi_sum and N_sum have been divided by this factor
+    phi = phiSolver->solve(
+        (Vort / average_atomic_mass - FV::Div_a_Grad_perp(1 / Bsq, Pi_sum)) / nmi_B2,
         phi_boundary);
   }
 
@@ -474,7 +464,7 @@ void Vorticity::transform(Options &state) {
 
   // Outer boundary cells
   if (mesh->firstX()) {
-    for (int i = mesh->xstart-2; i >= 0; --i) {
+    for (int i = mesh->xstart - 2; i >= 0; --i) {
       for (int j = mesh->ystart; j <= mesh->yend; ++j) {
         for (int k = 0; k < mesh->LocalNz; ++k) {
           phi(i, j, k) = phi(i + 1, j, k);
@@ -498,11 +488,14 @@ void Vorticity::transform(Options &state) {
     // Diamagnetic current. This is calculated here so that the energy sources/sinks
     // can be calculated for the evolving species.
 
-    Vector3D Jdia; Jdia.x = 0.0; Jdia.y = 0.0; Jdia.z = 0.0;
+    Vector3D Jdia;
+    Jdia.x = 0.0;
+    Jdia.y = 0.0;
+    Jdia.z = 0.0;
     Jdia.covariant = Curlb_B.covariant;
 
     Options& allspecies = state["species"];
-    
+
     for (auto& kv : allspecies.getChildren()) {
       Options& species = allspecies[kv.first]; // Note: need non-const
 
@@ -511,19 +504,18 @@ void Vorticity::transform(Options &state) {
       }
       // Note that the species must have a charge, but charge is not used,
       // because it cancels out in the expression for current
-      
+
       auto P = GET_NOBOUNDARY(Field3D, species["pressure"]);
 
       Vector3D Jdia_species = P * Curlb_B; // Diamagnetic current for this species
-      
+
       // This term energetically balances diamagnetic term
       // in the vorticity equation
-      subtract(species["energy_source"],
-               Jdia_species * Grad(phi));
+      subtract(species["energy_source"], Jdia_species * Grad(phi));
 
       Jdia += Jdia_species; // Collect total diamagnetic current
     }
-    
+
     // Note: This term is central differencing so that it balances
     // the corresponding compression term in the species pressure equations
     DivJdia = Div(Jdia);
@@ -535,15 +527,17 @@ void Vorticity::transform(Options &state) {
       for (auto& kv : allspecies.getChildren()) {
         Options& species = allspecies[kv.first]; // Note: need non-const
 
-        if (!(IS_SET_NOBOUNDARY(species["pressure"]) and species.isSet("charge") and species.isSet("AA"))) {
-          continue; // No pressure, charge or mass -> no polarisation current due to diamagnetic flow
+        if (!(IS_SET_NOBOUNDARY(species["pressure"]) and species.isSet("charge")
+              and species.isSet("AA"))) {
+          continue; // No pressure, charge or mass -> no polarisation current due to
+                    // diamagnetic flow
         }
         auto P = GET_NOBOUNDARY(Field3D, species["pressure"]);
         auto AA = get<BoutReal>(species["AA"]);
-        
+
         if (boussinesq) {
           add(species["energy_source"],
-              (3./2) * P * (AA / average_atomic_mass) * DivJdia);
+              (3. / 2) * P * (AA / average_atomic_mass) * DivJdia);
         } else {
           auto N = GET_NOBOUNDARY(Field3D, species["density"]);
           add(species["energy_source"],
@@ -559,8 +553,9 @@ void Vorticity::transform(Options &state) {
     // Damping of vorticity due to collisions
 
     // Calculate a mass-weighted collision frequency
-    Field3D sum_A_nu_n = zeroFrom(Vort); // Sum of atomic mass * collision frequency * density
-    Field3D sum_A_n = zeroFrom(Vort);    // Sum of atomic mass * density
+    Field3D sum_A_nu_n =
+        zeroFrom(Vort); // Sum of atomic mass * collision frequency * density
+    Field3D sum_A_n = zeroFrom(Vort); // Sum of atomic mass * density
 
     const Options& allspecies = state["species"];
     for (const auto& kv : allspecies.getChildren()) {
@@ -570,7 +565,7 @@ void Vorticity::transform(Options &state) {
         continue; // No charge or mass -> no current
       }
       if (fabs(get<BoutReal>(species["charge"])) < 1e-5) {
-	continue; // Zero charge
+        continue; // Zero charge
       }
 
       const BoutReal A = get<BoutReal>(species["AA"]);
@@ -578,16 +573,15 @@ void Vorticity::transform(Options &state) {
       const Field3D AN = A * N;
       sum_A_n += AN;
       if (IS_SET(species["collision_frequency"])) {
-	sum_A_nu_n += AN * GET_VALUE(Field3D, species["collision_frequency"]);
+        sum_A_nu_n += AN * GET_VALUE(Field3D, species["collision_frequency"]);
       }
     }
 
     Field3D weighted_collision_frequency = sum_A_nu_n / sum_A_n;
     weighted_collision_frequency.setBoundary("neumann");
 
-    DivJcol = - FV::Div_a_Grad_perp(
-		    weighted_collision_frequency * average_atomic_mass
-		    / Bsq, phi);
+    DivJcol = -FV::Div_a_Grad_perp(
+        weighted_collision_frequency * average_atomic_mass / Bsq, phi);
 
     ddt(Vort) += DivJcol;
     set(fields["DivJcol"], DivJcol);
@@ -596,8 +590,8 @@ void Vorticity::transform(Options &state) {
   set(fields["vorticity"], Vort);
   set(fields["phi"], phi);
 }
-  
-void Vorticity::finally(const Options &state) {
+
+void Vorticity::finally(const Options& state) {
   AUTO_TRACE();
 
   phi = get<Field3D>(state["fields"]["phi"]);
@@ -607,8 +601,7 @@ void Vorticity::finally(const Options &state) {
       // For now, use simplified version of ExB advection terms for Boussinesq case
       ddt(Vort) -= Div_n_bxGrad_f_B_XPPM(Vort, phi, bndry_flux, poloidal_flows);
     } else {
-      ddt(Vort) -=
-        Div_n_bxGrad_f_B_XPPM(0.5 * Vort, phi, bndry_flux, poloidal_flows);
+      ddt(Vort) -= Div_n_bxGrad_f_B_XPPM(0.5 * Vort, phi, bndry_flux, poloidal_flows);
 
       // V_ExB dot Grad(Pi_sum)
       Field3D vEdotGradPi = bracket(phi, Pi_sum, BRACKET_ARAKAWA);
@@ -622,13 +615,13 @@ void Vorticity::finally(const Options &state) {
       ddt(Vort) -= FV::Div_a_Laplace_perp(0.5 / Bsq, vEdotGradPi);
 
       if (boussinesq) {
-        ddt(Vort) -= Div_n_bxGrad_f_B_XPPM(DelpPhi_2B2, phi + Pi_sum, bndry_flux,
-                                           poloidal_flows);
+        ddt(Vort) -=
+            Div_n_bxGrad_f_B_XPPM(DelpPhi_2B2, phi + Pi_sum, bndry_flux, poloidal_flows);
       } else {
-	ddt(Vort) -= Div_n_bxGrad_f_B_XPPM(N_sum*DelpPhi_2B2, phi, bndry_flux,
-					   poloidal_flows);
-	ddt(Vort) -= Div_n_bxGrad_f_B_XPPM(DelpPhi_2B2, Pi_sum, bndry_flux,
-					   poloidal_flows);
+        ddt(Vort) -=
+            Div_n_bxGrad_f_B_XPPM(N_sum * DelpPhi_2B2, phi, bndry_flux, poloidal_flows);
+        ddt(Vort) -=
+            Div_n_bxGrad_f_B_XPPM(DelpPhi_2B2, Pi_sum, bndry_flux, poloidal_flows);
 
         // V_ExB dot Grad(n)
         Field3D vEdotGradN = bracket(phi, N_sum, BRACKET_ARAKAWA);
@@ -639,12 +632,11 @@ void Vorticity::finally(const Options &state) {
       }
     }
   }
-  
+
   if (state.isSection("fields") and state["fields"].isSet("DivJextra")) {
     auto DivJextra = get<Field3D>(state["fields"]["DivJextra"]);
 
-    // Parallel current is handled here, to allow different 2D or 3D closures
-    // to be used
+    // 2D parallel current closures are handled here
     ddt(Vort) += DivJextra;
   }
 
@@ -676,7 +668,8 @@ void Vorticity::finally(const Options &state) {
     }
 
     if (phi_dissipation) {
-      // Adds dissipation term like in other equations, but depending on gradient of potential
+      // Adds dissipation term like in other equations, but depending on gradient of
+      // potential
       ddt(Vort) -= FV::Div_par(-phi, 0.0, sound_speed);
     }
   }
@@ -687,5 +680,3 @@ void Vorticity::finally(const Options &state) {
     ddt(Vort) -= hyper_z * SQ(SQ(coord->dz)) * D4DZ4(Vort);
   }
 }
-
-
