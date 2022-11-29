@@ -54,6 +54,15 @@ const Field2D Laplace_FV(const Field2D &k, const Field2D &f);
 /// Perpendicular diffusion including X and Y directions
 const Field3D Div_a_Grad_perp_upwind(const Field3D& a, const Field3D& f);
 
+/*!
+ * Div ( a Grad_perp(f) ) -- ∇⊥ ( a ⋅ ∇⊥ f) -- Vorticity
+ *
+ * This version includes corrections for non-orthogonal meshes
+ * in which the g12 and g13 components can be non-zero
+ * i.e. X-Y, X-Z and Y-Z coordinates can all be non-orthogonal.
+ */
+Field3D Div_a_Grad_perp_nonorthog(const Field3D& a, const Field3D& x);
+
 namespace FV {
   template<typename CellEdges = MC>
   const Field3D Div_par_fvv(const Field3D &f_in, const Field3D &v_in,
