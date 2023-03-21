@@ -117,7 +117,7 @@ void NeutralMixed::transform(Options& state) {
   // Nnlim Used where division by neutral density is needed
   Nnlim = floor(Nn, nn_floor);
   Tn = Pn / Nnlim;
-  Tn.applyBoundary("neumann");
+  // Tn.applyBoundary("neumann");
 
   Vn = NVn / (AA * Nnlim);
   Vnlim = Vn;
@@ -335,6 +335,12 @@ void NeutralMixed::finally(const Options& state) {
   /////////////////////////////////////////////////////
   // Neutral pressure
   TRACE("Neutral pressure");
+
+  // Enabling DnnNn allows conduction of neutral heat (but not advection)
+  // This allows us to force neutral temperature to an arbitrary number
+  // Note this is hardcoded for now
+  DnnNn.applyBoundary("neumann");
+  Tn.applyBoundary("dirichlet(0.06)");
 
   ddt(Pn) = -FV::Div_par(Pn, Vn, sound_speed)      // Advection
             - (2. / 3) * Pn * Div_par(Vn)          // Compression
