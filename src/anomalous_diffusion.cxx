@@ -102,7 +102,7 @@ void AnomalousDiffusion::transform(Options& state) {
     add(species["momentum_source"], Div_a_Grad_perp_upwind(AA * V2D * anomalous_D, N2D));
 
     add(species["energy_source"],
-        Div_a_Grad_perp_upwind((3. / 2) * T2D * anomalous_D, N2D));
+        Div_a_Grad_perp_upwind((5. / 2) * T2D * anomalous_D, N2D));
   }
 
   if (include_chi) {

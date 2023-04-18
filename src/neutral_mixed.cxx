@@ -338,7 +338,7 @@ void NeutralMixed::finally(const Options& state) {
 
   ddt(Pn) = -FV::Div_par(Pn, Vn, sound_speed)      // Advection
             - (2. / 3) * Pn * Div_par(Vn)          // Compression
-            + FV::Div_a_Grad_perp(DnnPn, logPnlim) // Perpendicular diffusion
+            + FV::Div_a_Grad_perp((5. / 3) * DnnPn, logPnlim) // Perpendicular diffusion
             + FV::Div_a_Grad_perp(DnnNn, Tn)       // Conduction
             + FV::Div_par_K_Grad_par(DnnNn, Tn)    // Parallel conduction
       ;
