@@ -51,6 +51,7 @@
 #include "include/noflow_boundary.hxx"
 #include "include/polarisation_drift.hxx"
 #include "include/quasineutral.hxx"
+#include "include/radas.hxx"
 #include "include/recycling.hxx"
 #include "include/relax_potential.hxx"
 #include "include/scale_timederivs.hxx"
