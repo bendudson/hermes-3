@@ -87,6 +87,20 @@ private:
   bool always_set_phi; ///< Set phi field?
 
   Field3D wall_potential; ///< Voltage of the wall. Normalised units.
+
+  bool diagnose; // Save additional diagnostics?
+
+  Field3D hflux_e;
+  Field3D phi; // Phi on boundaries
+  Field3D ion_sum; // Sum of ion current on boundaries
+
+  struct Diagnostics {
+    Field3D E;
+  };
+
+  /// Store sheath diagnostics for each species separately
+  std::map<std::string, Diagnostics> diagnostics;
+
 };
 
 namespace {

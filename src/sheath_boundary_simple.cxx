@@ -106,6 +106,18 @@ SheathBoundarySimple::SheathBoundarySimple(std::string name, Options& alloptions
                    / Tnorm;
   // Convert to field aligned coordinates
   wall_potential = toFieldAligned(wall_potential);
+
+  diagnose = options["diagnose"]
+      .doc("Output additional diagnostics?")
+      .withDefault<bool>(false);
+
+  // Save diagnostics
+  if (diagnose) {
+    bout::globals::dump.addRepeat(hflux_e, std::string("Ee_sheath"));
+    bout::globals::dump.addRepeat(phi, std::string("phi_sheath"));
+    bout::globals::dump.addRepeat(ion_sum, std::string("J_sheath"));
+  }
+      
 }
 
 void SheathBoundarySimple::transform(Options& state) {
@@ -141,7 +153,7 @@ void SheathBoundarySimple::transform(Options& state) {
   // Electrostatic potential
   // If phi is set, use free boundary condition
   // If phi not set, calculate assuming zero current
-  Field3D phi;
+
   if (state.isSection("fields") and state["fields"].isSet("phi")) {
     phi = toFieldAligned(getNoBoundary<Field3D>(state["fields"]["phi"]));
   } else {
@@ -151,7 +163,7 @@ void SheathBoundarySimple::transform(Options& state) {
     //
     // To avoid looking up species for every grid point, this
     // loops over the boundaries once per species.
-    Field3D ion_sum = 0.0;
+    ion_sum = 0.0;
 
     // Iterate through charged ion species
     for (auto& kv : allspecies.getChildren()) {
@@ -287,6 +299,8 @@ void SheathBoundarySimple::transform(Options& state) {
     ? toFieldAligned(getNonFinal<Field3D>(electrons["energy_source"]))
     : zeroFrom(Ne);
 
+  hflux_e = zeroFrom(electron_energy_source); // sheath heat flux for diagnostics
+
   if (lower_y) {
     for (RangeIterator r = mesh->iterateBndryLowerY(); !r.isDone(); r++) {
       for (int jz = 0; jz < mesh->LocalNz; jz++) {
@@ -333,6 +347,7 @@ void SheathBoundarySimple::transform(Options& state) {
         // Divide by volume of cell to get energy loss rate (< 0)
         BoutReal power = flux / (coord->dy[i] * coord->J[i]);
 
+        hflux_e[i] += power;
         electron_energy_source[i] += power;
       }
     }
@@ -385,6 +400,7 @@ void SheathBoundarySimple::transform(Options& state) {
         // Divide by volume of cell to get energy loss rate (> 0)
         BoutReal power = flux / (coord->dy[i] * coord->J[i]);
 
+        hflux_e[i] -= power;
         electron_energy_source[i] -= power;
       }
     }
@@ -410,6 +426,8 @@ void SheathBoundarySimple::transform(Options& state) {
     // Set the potential, including boundary conditions
     setBoundary(state["fields"]["phi"], fromFieldAligned(phi));
   }
+
+  
 
   //////////////////////////////////////////////////////////////////
   // Iterate through all ions
@@ -451,6 +469,10 @@ void SheathBoundarySimple::transform(Options& state) {
     Field3D energy_source = species.isSet("energy_source")
       ? toFieldAligned(getNonFinal<Field3D>(species["energy_source"]))
       : zeroFrom(Ni);
+
+    // Initialise sheath ion heat flux. This will be created for each species 
+    // saved in diagnostics struct and then destroyed and re-created for next species
+    Field3D hflux_i = zeroFrom(energy_source);
 
     if (lower_y) {
       for (RangeIterator r = mesh->iterateBndryLowerY(); !r.isDone(); r++) {
@@ -502,6 +524,7 @@ void SheathBoundarySimple::transform(Options& state) {
           // Divide by volume of cell to get energy loss rate (< 0)
           BoutReal power = flux / (coord->dy[i] * coord->J[i]);
 
+          hflux_i[i] += power;
           energy_source[i] += power;
         }
       }
@@ -560,9 +583,25 @@ void SheathBoundarySimple::transform(Options& state) {
           BoutReal power = flux / (coord->dy[i] * coord->J[i]);
           ASSERT2(std::isfinite(power));
 
+          hflux_i[i] -= power;
           energy_source[i] -= power; // Note: Sign negative because power > 0
         }
       }
+    }
+
+    if (diagnose) {
+      // Find the diagnostics struct for this species
+      auto search = diagnostics.find(kv.first);
+      if (search == diagnostics.end()) {
+        // If not found, create a diagnostics struct and initialise fields
+        auto it_bool_pair = diagnostics.emplace(kv.first, Diagnostics {hflux_i});
+        auto& d = it_bool_pair.first->second;
+        bout::globals::dump.addRepeat(d.E, std::string("E") + kv.first + std::string("_sheath"));
+      } else {
+      // Update diagnostic values
+      auto& d = search->second;
+      d.E = hflux_i;
+      } 
     }
 
     // Finished boundary conditions for this species
