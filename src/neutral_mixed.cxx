@@ -318,7 +318,7 @@ void NeutralMixed::finally(const Options& state) {
   // Neutral density
   TRACE("Neutral density");
   ddt(Nn) = -FV::Div_par_mod<hermes::Limiter>(Nn, Vn, sound_speed) // Advection
-            + FV::Div_a_Grad_perp(DnnNn, logPnlim) // Perpendicular diffusion
+            + Div_a_Grad_perp_nonorthog(DnnNn, logPnlim) // Perpendicular diffusion
       ;
 
   Sn = density_source; // Save for possible output
@@ -334,7 +334,7 @@ void NeutralMixed::finally(const Options& state) {
   ddt(NVn) =
       -AA * FV::Div_par_fvv<hermes::Limiter>(Nnlim, Vn, sound_speed) // Momentum flow
       - Grad_par(Pn)                                                 // Pressure gradient
-      + FV::Div_a_Grad_perp(DnnNVn, logPnlim) // Perpendicular diffusion
+      + Div_a_Grad_perp_nonorthog(DnnNVn, logPnlim) // Perpendicular diffusion
       ;
 
   if (neutral_viscosity) {
@@ -348,7 +348,7 @@ void NeutralMixed::finally(const Options& state) {
     // eta_n = (2. / 5) * kappa_n;
     //
 
-    ddt(NVn) += AA * FV::Div_a_Grad_perp((2. / 5) * DnnNn, Vn)    // Perpendicular viscosity
+    ddt(NVn) += AA * Div_a_Grad_perp_nonorthog((2. / 5) * DnnNn, Vn)    // Perpendicular viscosity
               + AA * FV::Div_par_K_Grad_par((2. / 5) * DnnNn, Vn) // Parallel viscosity
       ;
   }
@@ -364,8 +364,8 @@ void NeutralMixed::finally(const Options& state) {
 
   ddt(Pn) = -FV::Div_par_mod<hermes::Limiter>(Pn, Vn, sound_speed) // Advection
             - (2. / 3) * Pn * Div_par(Vn)                          // Compression
-            + FV::Div_a_Grad_perp(DnnPn, logPnlim) // Perpendicular diffusion
-            + FV::Div_a_Grad_perp(DnnNn, Tn)       // Conduction
+            + Div_a_Grad_perp_nonorthog(DnnPn, logPnlim) // Perpendicular diffusion
+            + Div_a_Grad_perp_nonorthog(DnnNn, Tn)       // Conduction
             + FV::Div_par_K_Grad_par(DnnNn, Tn)    // Parallel conduction
       ;
 
