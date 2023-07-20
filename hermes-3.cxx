@@ -23,16 +23,20 @@
 #include "hermes-3.hxx"
 #include "revision.hxx"
 
+#include "include/adas_carbon.hxx"
 #include "include/adas_neon.hxx"
 #include "include/amjuel_helium.hxx"
 #include "include/amjuel_hyd_ionisation.hxx"
 #include "include/amjuel_hyd_recombination.hxx"
 #include "include/anomalous_diffusion.hxx"
+#include "include/binormal_stpm.hxx"
 #include "include/collisions.hxx"
 #include "include/diamagnetic_drift.hxx"
 #include "include/electromagnetic.hxx"
 #include "include/electron_force_balance.hxx"
+#include "include/electron_viscosity.hxx"
 #include "include/evolve_density.hxx"
+#include "include/evolve_energy.hxx"
 #include "include/evolve_momentum.hxx"
 #include "include/evolve_pressure.hxx"
 #include "include/fixed_density.hxx"
@@ -52,6 +56,7 @@
 #include "include/quasineutral.hxx"
 #include "include/recycling.hxx"
 #include "include/relax_potential.hxx"
+#include "include/scale_timederivs.hxx"
 #include "include/set_temperature.hxx"
 #include "include/sheath_boundary.hxx"
 #include "include/sheath_boundary_insulating.hxx"
@@ -149,7 +154,10 @@ int Hermes::init(bool restarting) {
   // Options::root() is passed as the root of the component options, so that
   // individual components use their own sections, rather than subsections of [hermes].
   scheduler = ComponentScheduler::create(options, Options::root(), solver);
-  
+
+  // Preconditioner
+  setPrecon((preconfunc)&Hermes::precon);
+
   return 0;
 }
 

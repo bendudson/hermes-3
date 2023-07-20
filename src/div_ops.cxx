@@ -27,10 +27,10 @@
 
 #include <bout/assert.hxx>
 #include <bout/mesh.hxx>
-#include <derivs.hxx>
-#include <globals.hxx>
-#include <output.hxx>
-#include <utils.hxx>
+#include <bout/derivs.hxx>
+#include <bout/globals.hxx>
+#include <bout/output.hxx>
+#include <bout/utils.hxx>
 
 #include <cmath>
 
@@ -804,10 +804,15 @@ const Field3D Div_a_Grad_perp_upwind(const Field3D& a, const Field3D& f) {
   for (int i = mesh->xstart; i <= mesh->xend; i++) {
     for (int j = mesh->ystart; j <= mesh->yend; j++) {
 
-      BoutReal coef =
+      BoutReal coef_u =
           0.5
           * (coord->g_23(i, j) / SQ(coord->J(i, j) * coord->Bxy(i, j))
              + coord->g_23(i, j + 1) / SQ(coord->J(i, j + 1) * coord->Bxy(i, j + 1)));
+
+      BoutReal coef_d =
+          0.5
+          * (coord->g_23(i, j) / SQ(coord->J(i, j) * coord->Bxy(i, j))
+             + coord->g_23(i, j - 1) / SQ(coord->J(i, j - 1) * coord->Bxy(i, j - 1)));
 
       for (int k = 0; k < mesh->LocalNz; k++) {
         // Calculate flux between j and j+1
@@ -824,9 +829,9 @@ const Field3D Div_a_Grad_perp_upwind(const Field3D& a, const Field3D& f) {
                         / (coord->dy(i, j + 1) + coord->dy(i, j));
 
         BoutReal fout = 0.25 * (ac(i, j, k) + aup(i, j + 1, k))
-                        * (coord->J(i, j) * coord->g23(i, j)
-                           + coord->J(i, j + 1) * coord->g23(i, j + 1))
-                        * (dfdz - coef * dfdy);
+                            * (coord->J(i, j) * coord->g23(i, j)
+                               + coord->J(i, j + 1) * coord->g23(i, j + 1))
+                            * (dfdz - coef_u * dfdy);
 
         yzresult(i, j, k) = fout / (coord->dy(i, j) * coord->J(i, j));
 
@@ -841,7 +846,7 @@ const Field3D Div_a_Grad_perp_upwind(const Field3D& a, const Field3D& f) {
         fout = 0.25 * (ac(i, j, k) + adown(i, j - 1, k))
                * (coord->J(i, j) * coord->g23(i, j)
                   + coord->J(i, j - 1) * coord->g23(i, j - 1))
-               * (dfdz - coef * dfdy);
+               * (dfdz - coef_d * dfdy);
 
         yzresult(i, j, k) -= fout / (coord->dy(i, j) * coord->J(i, j));
       }

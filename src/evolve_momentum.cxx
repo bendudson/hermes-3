@@ -1,12 +1,13 @@
 
-#include <derivs.hxx>
-#include <difops.hxx>
+#include <bout/derivs.hxx>
+#include <bout/difops.hxx>
 #include <bout/constants.hxx>
 #include <bout/fv_ops.hxx>
 #include <bout/output_bout_types.hxx>
 
 #include "../include/evolve_momentum.hxx"
 #include "../include/div_ops.hxx"
+#include "../include/hermes_build_config.hxx"
 
 namespace {
 BoutReal floor(BoutReal value, BoutReal min) {
@@ -43,6 +44,10 @@ EvolveMomentum::EvolveMomentum(std::string name, Options &alloptions, Solver *so
   diagnose = options["diagnose"]
     .doc("Output additional diagnostics?")
     .withDefault<bool>(false);
+
+  fix_momentum_boundary_flux = options["fix_momentum_boundary_flux"]
+    .doc("Fix Y boundary momentum flux to boundary midpoint value?")
+    .withDefault<bool>(false);
 }
 
 void EvolveMomentum::transform(Options &state) {
@@ -51,27 +56,34 @@ void EvolveMomentum::transform(Options &state) {
 
   auto& species = state["species"][name];
 
-  set(species["momentum"], NV);
-
   // Not using density boundary condition
-  Field3D N = floor(getNoBoundary<Field3D>(species["density"]), density_floor);
+  auto N = getNoBoundary<Field3D>(species["density"]);
+  Field3D Nlim = floor(N, density_floor);
   BoutReal AA = get<BoutReal>(species["AA"]); // Atomic mass
 
-  V = NV / (AA * N);
+  V = NV / (AA * Nlim);
   V.applyBoundary();
   set(species["velocity"], V);
+
+  NV_solver = NV; // Save the momentum as calculated by the solver
+  NV = AA * N * V; // Re-calculate consistent with V and N
+  // Note: Now NV and NV_solver will differ when N < density_floor
+  set(species["momentum"], NV);
 }
 
 void EvolveMomentum::finally(const Options &state) {
   AUTO_TRACE();
 
   auto& species = state["species"][name];
+  BoutReal AA = get<BoutReal>(species["AA"]);
 
   // Get updated momentum with boundary conditions
   NV = get<Field3D>(species["momentum"]);
 
   // Get the species density
   Field3D N = get<Field3D>(species["density"]);
+  // Apply a floor to the density
+  Field3D Nlim = floor(N, density_floor);
 
   if (state.isSection("fields") and state["fields"].isSet("phi")
       and species.isSet("charge")) {
@@ -98,13 +110,19 @@ void EvolveMomentum::finally(const Options &state) {
   V = get<Field3D>(species["velocity"]);
 
   // Typical wave speed used for numerical diffusion
-  Field3D T = get<Field3D>(species["temperature"]);
-  BoutReal AA = get<BoutReal>(species["AA"]);
-  Field3D sound_speed = sqrt(T / AA);
+  Field3D fastest_wave;
+  if (state.isSet("fastest_wave")) {
+    fastest_wave = get<Field3D>(state["fastest_wave"]);
+  } else {
+    Field3D T = get<Field3D>(species["temperature"]);
+    fastest_wave = sqrt(T / AA);
+  }
 
-  // Note: Density floor should be consistent with calculation of V
-  //       otherwise energy conservation is affected
-  ddt(NV) -= FV::Div_par_fvv(floor(N, density_floor), V, sound_speed);
+  // Note:
+  //  - Density floor should be consistent with calculation of V
+  //    otherwise energy conservation is affected
+  //  - using the same operator as in density and pressure equations doesn't work
+  ddt(NV) -= AA * FV::Div_par_fvv<hermes::Limiter>(Nlim, V, fastest_wave, fix_momentum_boundary_flux);
 
   // Parallel pressure gradient
   if (species.isSet("pressure")) {
@@ -115,7 +133,7 @@ void EvolveMomentum::finally(const Options &state) {
   if (species.isSet("low_n_coeff")) {
     // Low density parallel diffusion
     Field3D low_n_coeff = get<Field3D>(species["low_n_coeff"]);
-    ddt(NV) += FV::Div_par_K_Grad_par(low_n_coeff * V, N) + FV::Div_par_K_Grad_par(low_n_coeff * floor(N, density_floor), V);
+    ddt(NV) += FV::Div_par_K_Grad_par(low_n_coeff * V, N) + FV::Div_par_K_Grad_par(low_n_coeff * Nlim, V);
   }
 
   if (hyper_z > 0.) {
@@ -127,6 +145,15 @@ void EvolveMomentum::finally(const Options &state) {
   if (species.isSet("momentum_source")) {
     momentum_source = get<Field3D>(species["momentum_source"]);
     ddt(NV) += momentum_source;
+  }
+
+  // If N < density_floor then NV and NV_solver may differ
+  // -> Add term to force NV_solver towards NV
+  ddt(NV) += NV - NV_solver;
+
+  // Scale time derivatives
+  if (state.isSet("scale_timederivs")) {
+    ddt(NV) *= get<Field3D>(state["scale_timederivs"]);
   }
 
 #if CHECKLEVEL >= 1
