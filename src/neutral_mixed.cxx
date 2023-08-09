@@ -373,7 +373,7 @@ void NeutralMixed::finally(const Options& state) {
       ;
 
     ddt(NVn) += momentum_source; // Viscosity
-    ddt(Pn) -= Vn * momentum_source; // Viscous heating
+    ddt(Pn) -= (2. / 3) * Vn * momentum_source; // Viscous heating
   }
 
   BOUT_FOR(i, Pn.getRegion("RGN_ALL")) {
