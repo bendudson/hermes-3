@@ -52,7 +52,7 @@ NeutralMixed::NeutralMixed(const std::string& name, Options& alloptions, Solver*
 
   flux_limit = options["flux_limit"]
     .doc("Use isotropic flux limiters?")
-    .withDefault(false);
+    .withDefault(true);
 
   flux_limit_alpha = options["flux_limit_alpha"]
     .doc("Scale flux limits")
@@ -257,13 +257,13 @@ void NeutralMixed::finally(const Options& state) {
   BoutReal neutral_lmax =
       0.1 / get<BoutReal>(state["units"]["meters"]); // Normalised length
 
-  Field3D Rnn = sqrt(Tnlim / AA) / neutral_lmax; // Neutral-neutral collisions [normalised frequency]
+  Field3D Rnn = sqrt(Tn / AA) / neutral_lmax; // Neutral-neutral collisions [normalised frequency]
 
   if (localstate.isSet("collision_frequency")) {
     // Dnn = Vth^2 / sigma
-    Dnn = (Tnlim / AA) / (get<Field3D>(localstate["collision_frequency"]) + Rnn);
+    Dnn = (Tn / AA) / (get<Field3D>(localstate["collision_frequency"]) + Rnn);
   } else {
-    Dnn = (Tnlim / AA) / Rnn;
+    Dnn = (Tn / AA) / Rnn;
   }
 
   mesh->communicate(Dnn);
@@ -393,8 +393,8 @@ void NeutralMixed::finally(const Options& state) {
 
   // Note: Parallel and perpendicular flux scaled by limiter
   ddt(Nn) = -FV::Div_par_mod<hermes::Limiter>(Nn, Vn * particle_flux_factor, sound_speed) // Advection
-    - FV::Div_a_Grad_perp(DnnNn * particle_flux_factor, logPnlim) // Perpendicular diffusion
-      ;
+    + FV::Div_a_Grad_perp(DnnNn * particle_flux_factor, logPnlim) // Perpendicular diffusion
+    ;
 
   Sn = density_source; // Save for possible output
   if (localstate.isSet("density_source")) {
