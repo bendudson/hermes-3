@@ -54,6 +54,18 @@ NeutralMixed::NeutralMixed(const std::string& name, Options& alloptions, Solver*
     .doc("Use isotropic flux limiters?")
     .withDefault(true);
 
+  particle_flux_limiter = options["particle_flux_limiter"]
+    .doc("Enable particle flux limiter?")
+    .withDefault(true);
+
+  heat_flux_limiter = options["heat_flux_limiter"]
+    .doc("Enable heat flux limiter?")
+    .withDefault(true);
+
+  momentum_flux_limiter = options["momentum_flux_limiter"]
+    .doc("Enable momentum flux limiter?")
+    .withDefault(true);
+
   flux_limit_alpha = options["flux_limit_alpha"]
     .doc("Scale flux limits")
     .withDefault(1.0);
@@ -338,10 +350,13 @@ void NeutralMixed::finally(const Options& state) {
     Field3D particle_limit = Nnlim * 0.25 * sqrt(8 * Tnlim / (PI * AA));
 
     // Particle flux reduction factor
-    particle_flux_factor = pow(1. + pow(particle_flux_abs / (flux_limit_alpha * particle_limit),
-                                        flux_limit_gamma),
-                               -1./flux_limit_gamma);
-
+    if (particle_flux_limiter){
+      particle_flux_factor = pow(1. + pow(particle_flux_abs / (flux_limit_alpha * particle_limit),
+                                          flux_limit_gamma),
+                                -1./flux_limit_gamma);
+    } else {
+      particle_flux_factor = 1.0;
+    }
     // BOUT_FOR(i, particle_flux_factor.getRegion("RGN_NOBNDRY")) {
     //   output.write("particle_flux_factor {}: {} {} {}\n", i, particle_flux_factor[i], particle_flux_abs[i], particle_limit[i]);
     // }

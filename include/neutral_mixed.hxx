@@ -51,6 +51,7 @@ private:
   BoutReal nn_floor; ///< Minimum Nn used when dividing NVn by Nn to get Vn.
 
   bool flux_limit; ///< Impose flux limiter?
+  bool particle_flux_limiter, heat_flux_limiter, momentum_flux_limiter; ///< Which limiters to impose
   BoutReal flux_limit_alpha;
   BoutReal flux_limit_gamma;
   Field3D particle_flux_factor; ///< Particle flux scaling factor
