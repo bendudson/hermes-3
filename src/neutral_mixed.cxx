@@ -374,10 +374,13 @@ void NeutralMixed::finally(const Options& state) {
     Field3D momentum_flux_abs = sqrt(momentum_flux * momentum_flux);
     Field3D momentum_limit = Pnlim;
 
-    momentum_flux_factor = pow(1. + pow(momentum_flux_abs / (flux_limit_alpha * momentum_limit),
-                                        flux_limit_gamma),
-                               -1./flux_limit_gamma);
-
+    if (momentum_flux_limiter) {
+      momentum_flux_factor = pow(1. + pow(momentum_flux_abs / (flux_limit_alpha * momentum_limit),
+                                          flux_limit_gamma),
+                                -1./flux_limit_gamma);
+    } else {
+      momentum_flux_factor = 1.0;
+    }
     // Flux of heat
     // Note:
     //  - Limiting the heat flux, not energy flux
@@ -390,10 +393,13 @@ void NeutralMixed::finally(const Options& state) {
     Field3D heat_flux_abs = sqrt(heat_flux * heat_flux);
     Field3D heat_limit = Pnlim * sqrt(2. * Tnlim / (PI * AA));
 
-    heat_flux_factor = pow(1. + pow(heat_flux_abs / (flux_limit_alpha * heat_limit),
-                                    flux_limit_gamma),
-                             -1./flux_limit_gamma);
-
+    if (heat_flux_limiter) {
+      heat_flux_factor = pow(1. + pow(heat_flux_abs / (flux_limit_alpha * heat_limit),
+                                      flux_limit_gamma),
+                              -1./flux_limit_gamma);
+    } else {
+      heat_flux_factor = 1.0;
+    }
     // Communicate guard cells and apply boundary conditions
     // because the flux factors will be differentiated
     mesh->communicate(particle_flux_factor, momentum_flux_factor, heat_flux_factor);
