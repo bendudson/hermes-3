@@ -64,6 +64,9 @@ private:
   /// Save more diagnostics?
   bool diagnose;
 
+  MPI_Comm comm;  ///< Communicator for all mesh
+  int npes, mype; ///< Number of MPI processes, this processor index
+
   /// Update collision frequencies, momentum and energy exchange
   /// nu_12    normalised frequency
   /// momentum_coefficient   Leading coefficient on parallel friction

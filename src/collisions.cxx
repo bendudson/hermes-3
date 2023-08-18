@@ -4,6 +4,9 @@
 #include <bout/output_bout_types.hxx>
 
 #include "../include/collisions.hxx"
+#include "bout/mesh.hxx"
+#include <bout/boutcomm.hxx>
+using bout::globals::mesh;
 
 namespace {
 BoutReal floor(BoutReal value, BoutReal min) {
@@ -47,6 +50,10 @@ Collisions::Collisions(std::string name, Options& alloptions, Solver*) {
   frictional_heating = options["frictional_heating"]
     .doc("Include R dot v heating term as energy source?")
     .withDefault<bool>(true);
+
+    comm = BoutComm::get(); // This should come from Mesh
+
+    MPI_Comm_rank(comm, &mype);
 }
 
 /// Calculate transfer of momentum and energy between species1 and species2
@@ -63,6 +70,8 @@ Collisions::Collisions(std::string name, Options& alloptions, Solver*) {
 ///       mass* variables are species masses in kg
 void Collisions::collide(Options& species1, Options& species2, const Field3D& nu_12, BoutReal momentum_coefficient) {
   AUTO_TRACE();
+
+  // output << std::string("\n>>> COLLIDING: ") << species1.name() << species2.name() << std::string("\n");
 
   add(species1["collision_frequency"], nu_12);
 
@@ -141,6 +150,38 @@ void Collisions::collide(Options& species1, Options& species2, const Field3D& nu
     }
   }
   set(collision_rates[species1.name()][species2.name()], nu_12);
+
+  if ((species1.name() == "d") or (species2.name() == "d")){
+    output << std::string("\n") << species1.name() << species2.name() << std::string(" New d K:\n") ;
+
+    for(int ix=0; ix < mesh->LocalNx ; ix++){
+      for(int iy=0; iy < mesh->LocalNy ; iy++){
+          for(int iz=0; iz < mesh->LocalNz; iz++){
+
+            BoutReal gx = mesh->getGlobalXIndex(ix);
+            BoutReal gy = mesh->getGlobalYIndex(iy);
+            BoutReal gz = mesh->getGlobalZIndex(iz);
+
+            if (gx == 3) {
+
+              output << nu_12(ix,iy,iz) << "\n";
+            }
+            
+            // output <<"MYPE: " << mype << ", (" << gx << ", " << gy << ", " << gz << "), nu_12 = " << nu_12(ix,iy,iz);
+            // if ((gy > 39.5) and (gy <40.5)) {
+
+            //   std::string string_count = std::string("(") + std::to_string(gx) + std::string(")");
+            //   output << string_count + std::string(": ") + std::to_string(nu_12(ix,iy,iz)) + std::string("; ");
+
+            // }
+            // output << "("" << ix << "Y:" << iy << "Z:" << iz << "T:" << Tn(ix, iy, iz) << "  ";
+            
+          }
+      }
+    }
+
+
+  }
 }
 
 void Collisions::transform(Options& state) {
@@ -184,6 +225,7 @@ void Collisions::transform(Options& state) {
           return nu;
         });
 
+        // output << std::string("\n") << electrons.name() << electrons.name() << std::string(" (ee) below:") ;
         collide(electrons, electrons, nu_ee / Omega_ci, 1.0);
         continue;
       }
@@ -240,7 +282,7 @@ void Collisions::transform(Options& state) {
           Zi == 2 ? 0.44 :
           Zi == 3 ? 0.40 :
           0.38; // Note: 0.38 is for Zi=4; tends to 0.29 for Zi->infty
-
+        // output << std::string("\n") << electrons.name() << species.name() << std::string(" (ed+) below:") ;
         collide(electrons, species, nu_ei / Omega_ci, mom_coeff);
 
       } else if (species.isSet("charge") and (get<BoutReal>(species["charge"]) < 0.0)) {
@@ -271,7 +313,7 @@ void Collisions::transform(Options& state) {
           // Electron-neutral collision rate
           return vth_e * Nnorm * Nn[i] * a0 * rho_s0;
         });
-
+        // output << std::string("\n") << electrons.name() << species.name() << std::string(" (ed) below:") ;
         collide(electrons, species, nu_en, 1.0);
       }
     }
@@ -371,6 +413,7 @@ void Collisions::transform(Options& state) {
           });
 
           // Update the species collision rates, momentum & energy exchange
+          // output << std::string("\n") << species1.name() << species2.name() << std::string(" (d+d+) below:") ;
           collide(species1, species2, nu_12 / Omega_ci, 1.0);
 
         } else {
@@ -391,7 +434,7 @@ void Collisions::transform(Options& state) {
             // Units: density [m^-3], a0 [m^2], rho_s0 [m]
             return vrel * density2[i] * a0 * rho_s0;
           });
-
+          // output << std::string("\n") << species1.name() << species2.name() << std::string(" (d+d) below:") ;
           collide(species1, species2, nu_12, 1.0);
         }
       }
@@ -437,7 +480,7 @@ void Collisions::transform(Options& state) {
             // Units: density [m^-3], a0 [m^2], rho_s0 [m]
             return vrel * density2[i] * a0 * rho_s0;
           });
-
+          // output << std::string("\n") << species1.name() << species2.name() << std::string(" (dd+) below:") ;
           collide(species1, species2, nu_12, 1.0);
 
         } else {
@@ -465,7 +508,7 @@ void Collisions::transform(Options& state) {
             // Units: density [m^-3], a0 [m^2], rho_s0 [m]
             return vrel * density2[i] * a0 * rho_s0;
           });
-
+          // output << std::string("\n") << species1.name() << species2.name() << std::string(" (dd) below:") ;
           collide(species1, species2, nu_12, 1.0);
         }
       }

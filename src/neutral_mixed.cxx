@@ -261,6 +261,23 @@ void NeutralMixed::finally(const Options& state) {
     Dnn = (Tn / AA) / Rnn;
   }
 
+  Field3D K = get<Field3D>(localstate["collision_frequency"]);
+  output << "\n USED FOR Dn:\n";
+  for(int ix=0; ix < mesh->LocalNx ; ix++){
+    for(int iy=0; iy < mesh->LocalNy ; iy++){
+      for(int iz=0; iz < mesh->LocalNz; iz++){
+
+        BoutReal gx = mesh->getGlobalXIndex(ix);
+        BoutReal gy = mesh->getGlobalYIndex(iy);
+        BoutReal gz = mesh->getGlobalZIndex(iz);
+
+        if (gx == 3) {
+          output << K(ix,iy,iz) << "\n";
+        }
+      }
+    }
+  }
+
   if (flux_limit > 0.0) {
     // Apply flux limit to diffusion,
     // using the local thermal speed and pressure gradient magnitude
