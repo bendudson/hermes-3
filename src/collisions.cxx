@@ -91,6 +91,25 @@ void Collisions::collide(Options& species1, Options& species2, const Field3D& nu
 
     add(species2["collision_frequency"], nu);
 
+    if ((species1.name() == "d") or (species2.name() == "d")){
+      output << std::string("\n") <<  species1.name() << "-" << species2.name() << "\t\t" << species2.name() << "-" << species1.name() << "\n";
+
+      for(int ix=0; ix < mesh->LocalNx ; ix++){
+        for(int iy=0; iy < mesh->LocalNy ; iy++){
+          for(int iz=0; iz < mesh->LocalNz; iz++){
+
+            BoutReal gx = mesh->getGlobalXIndex(ix);
+            BoutReal gy = mesh->getGlobalYIndex(iy);
+            BoutReal gz = mesh->getGlobalZIndex(iz);
+
+            if (gx == 3) {
+              output << std::setw(10) << nu_12(ix,iy,iz) << "\t" << nu(ix, iy, iz) << "\n";
+            }
+          }
+        }
+      }
+    }
+
     // Momentum exchange
     if (isSetFinalNoBoundary(species1["velocity"]) or
         isSetFinalNoBoundary(species2["velocity"])) {
@@ -148,14 +167,14 @@ void Collisions::collide(Options& species1, Options& species2, const Field3D& nu
       add(species1["energy_source"], Q12);
       subtract(species2["energy_source"], Q12);
     }
-  }
-  set(collision_rates[species1.name()][species2.name()], nu_12);
+  } else {
+    // Self-collisions
 
-  if ((species1.name() == "d") or (species2.name() == "d")){
-    output << std::string("\n") << species1.name() << species2.name() << std::string(" New d K:\n") ;
+    if (species1.name() == "d"){
+      output << std::string("\n") << species1.name() << "-" << species2.name() ;
 
-    for(int ix=0; ix < mesh->LocalNx ; ix++){
-      for(int iy=0; iy < mesh->LocalNy ; iy++){
+      for(int ix=0; ix < mesh->LocalNx ; ix++){
+        for(int iy=0; iy < mesh->LocalNy ; iy++){
           for(int iz=0; iz < mesh->LocalNz; iz++){
 
             BoutReal gx = mesh->getGlobalXIndex(ix);
@@ -163,25 +182,14 @@ void Collisions::collide(Options& species1, Options& species2, const Field3D& nu
             BoutReal gz = mesh->getGlobalZIndex(iz);
 
             if (gx == 3) {
-
               output << nu_12(ix,iy,iz) << "\n";
             }
-            
-            // output <<"MYPE: " << mype << ", (" << gx << ", " << gy << ", " << gz << "), nu_12 = " << nu_12(ix,iy,iz);
-            // if ((gy > 39.5) and (gy <40.5)) {
-
-            //   std::string string_count = std::string("(") + std::to_string(gx) + std::string(")");
-            //   output << string_count + std::string(": ") + std::to_string(nu_12(ix,iy,iz)) + std::string("; ");
-
-            // }
-            // output << "("" << ix << "Y:" << iy << "Z:" << iz << "T:" << Tn(ix, iy, iz) << "  ";
-            
           }
+        }
       }
     }
-
-
   }
+  set(collision_rates[species1.name()][species2.name()], nu_12);
 }
 
 void Collisions::transform(Options& state) {
@@ -533,7 +541,7 @@ void Collisions::outputVars(Options& state) {
 
       if (diagnose) {
 
-        set_with_attrs(state[std::string("K") + name + std::string("_coll")], get<Field3D>(collision_rates[s1->first][s2->first]),
+        set_with_attrs(state[std::string("K") + name + std::string("_coll")], getNonFinal<Field3D>(collision_rates[s1->first][s2->first]),
                      {{"time_dimension", "t"},
                       {"units", "s-1"},
                       {"conversion", Omega_ci},
