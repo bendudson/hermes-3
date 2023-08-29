@@ -78,6 +78,10 @@ NeutralMixed::NeutralMixed(const std::string& name, Options& alloptions, Solver*
     .doc("Include neutral gas viscosity?")
     .withDefault<bool>(true);
 
+  include_rnn = options["include_rnn"]
+    .doc("Include hardcoded MFP of 0.1m in diffusion calculation?")
+    .withDefault<bool>(true);
+
   if (precondition) {
     inv = std::unique_ptr<Laplacian>(Laplacian::create(&options["precon_laplace"]));
 
@@ -273,7 +277,11 @@ void NeutralMixed::finally(const Options& state) {
 
   if (localstate.isSet("collision_frequency")) {
     // Dnn = Vth^2 / sigma
-    Dnn = (Tn / AA) / (get<Field3D>(localstate["collision_frequency"]) + Rnn);
+    if (include_rnn) {
+      Dnn = (Tn / AA) / (get<Field3D>(localstate["collision_frequency"]) + Rnn);
+    } else {
+      Dnn = (Tn / AA) / (get<Field3D>(localstate["collision_frequency"]));
+    }
   } else {
     Dnn = (Tn / AA) / Rnn;
   }
