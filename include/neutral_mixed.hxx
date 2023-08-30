@@ -52,7 +52,7 @@ private:
 
   bool flux_limit; ///< Impose flux limiter?
   bool particle_flux_limiter, heat_flux_limiter, momentum_flux_limiter; ///< Which limiters to impose
-  bool include_rnn; ///< Include hardcoded max MFP of 0.1m in diffusion calculation?
+  BoutReal maximum_mfp; ///< Maximum mean free path for diffusion. 0.1 by default, -1 is off.
   BoutReal flux_limit_alpha;
   BoutReal flux_limit_gamma;
   Field3D particle_flux_factor; ///< Particle flux scaling factor

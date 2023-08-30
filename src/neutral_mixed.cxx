@@ -78,9 +78,9 @@ NeutralMixed::NeutralMixed(const std::string& name, Options& alloptions, Solver*
     .doc("Include neutral gas viscosity?")
     .withDefault<bool>(true);
 
-  include_rnn = options["include_rnn"]
-    .doc("Include hardcoded MFP of 0.1m in diffusion calculation?")
-    .withDefault<bool>(true);
+  maximum_mfp = options["maximum_mfp"]
+    .doc("Optional maximum mean free path in [m] for diffusive processes. -1 is off")
+    .withDefault(0.1);
 
   if (precondition) {
     inv = std::unique_ptr<Laplacian>(Laplacian::create(&options["precon_laplace"]));
@@ -277,12 +277,17 @@ void NeutralMixed::finally(const Options& state) {
 
   if (localstate.isSet("collision_frequency")) {
     // Dnn = Vth^2 / sigma
-    if (include_rnn) {
-      Dnn = (Tn / AA) / (get<Field3D>(localstate["collision_frequency"]) + Rnn);
-    } else {
-      Dnn = (Tn / AA) / (get<Field3D>(localstate["collision_frequency"]));
-    }
-  } else {
+
+    if (maximum_mfp != -1) {   // MFP limit enabled
+        Field3D Rnn = sqrt(Tn / AA) / (maximum_mfp / get<BoutReal>(state["units"]["meters"]));
+        Dnn = (Tn / AA) / (get<Field3D>(localstate["collision_frequency"]) + Rnn);
+      } else {   // MFP limit disabled
+        Dnn = (Tn / AA) / (get<Field3D>(localstate["collision_frequency"]));
+      }
+      
+  } else {  // If no collisions, hardcode max MFP to 0.1m
+    output_warn.write("No collisions set for the neutrals, limiting mean free path to 0.1m");
+    Field3D Rnn = sqrt(Tn / AA) / (0.1 / get<BoutReal>(state["units"]["meters"]));
     Dnn = (Tn / AA) / Rnn;
   }
 
