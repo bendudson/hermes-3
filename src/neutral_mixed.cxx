@@ -79,7 +79,7 @@ NeutralMixed::NeutralMixed(const std::string& name, Options& alloptions, Solver*
     .withDefault<bool>(true);
 
   maximum_mfp = options["maximum_mfp"]
-    .doc("Optional maximum mean free path in [m] for diffusive processes. -1 is off")
+    .doc("Optional maximum mean free path in [m] for diffusive processes. < 0 is off")
     .withDefault(0.1);
 
   if (precondition) {
@@ -270,15 +270,10 @@ void NeutralMixed::finally(const Options& state) {
   // Calculate cross-field diffusion from collision frequency
   //
   //
-  BoutReal neutral_lmax =
-      0.1 / get<BoutReal>(state["units"]["meters"]); // Normalised length
-
-  Field3D Rnn = sqrt(Tn / AA) / neutral_lmax; // Neutral-neutral collisions [normalised frequency]
-
   if (localstate.isSet("collision_frequency")) {
     // Dnn = Vth^2 / sigma
 
-    if (maximum_mfp != -1) {   // MFP limit enabled
+    if (maximum_mfp > 0) {   // MFP limit enabled
         Field3D Rnn = sqrt(Tn / AA) / (maximum_mfp / get<BoutReal>(state["units"]["meters"]));
         Dnn = (Tn / AA) / (get<Field3D>(localstate["collision_frequency"]) + Rnn);
       } else {   // MFP limit disabled
@@ -370,10 +365,7 @@ void NeutralMixed::finally(const Options& state) {
     } else {
       particle_flux_factor = 1.0;
     }
-    // BOUT_FOR(i, particle_flux_factor.getRegion("RGN_NOBNDRY")) {
-    //   output.write("particle_flux_factor {}: {} {} {}\n", i, particle_flux_factor[i], particle_flux_abs[i], particle_limit[i]);
-    // }
-    
+
     // Flux of parallel momentum
     // Question: Should flux-limited particle flux be used here, or original flux?
     // Note: momentum flux here doesn't include pressure gradient term
