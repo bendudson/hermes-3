@@ -59,6 +59,12 @@ private:
   Field3D momentum_flux_factor;
   Field3D heat_flux_factor;
 
+  BoutReal flux_factor_timescale; ///< Timescale over which flux factors vary
+  BoutReal flux_factor_time {-1.0}; ///< Last time the flux factors were updated
+  Field3D particle_flux_avg; ///< Moving average flux factor
+  Field3D momentum_flux_avg; ///< Moving average flux factor
+  Field3D heat_flux_avg; ///< Moving average flux factor
+
   bool neutral_viscosity; ///< include viscosity?
 
   bool precondition {true}; ///< Enable preconditioner?

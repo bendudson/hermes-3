@@ -54,6 +54,10 @@ NeutralMixed::NeutralMixed(const std::string& name, Options& alloptions, Solver*
     .doc("Use isotropic flux limiters?")
     .withDefault(true);
 
+  flux_factor_timescale = options["flux_factor_timescale"]
+    .doc("Time constant in flux limitation factor variation [seconds]. < 0 is off.")
+    .withDefault(-1.0) / seconds;
+
   particle_flux_limiter = options["particle_flux_limiter"]
     .doc("Enable particle flux limiter?")
     .withDefault(true);
@@ -411,6 +415,31 @@ void NeutralMixed::finally(const Options& state) {
     particle_flux_factor.applyBoundary("neumann");
     momentum_flux_factor.applyBoundary("neumann");
     heat_flux_factor.applyBoundary("neumann");
+
+    if (flux_factor_timescale > 0) {
+      // Smooth flux limitation factors over time
+      // Suppress rapid changes in flux limitation factors, while retaining
+      // the same steady-state solution.
+      BoutReal time = get<BoutReal>(state["time"]);
+      if (flux_factor_time < 0.0) {
+        // First time, so just copy values
+        particle_flux_avg = particle_flux_factor;
+        momentum_flux_avg = momentum_flux_factor;
+        heat_flux_avg = heat_flux_factor;
+      } else {
+        // Weight by a factor that depends on the elapsed time.
+        BoutReal weight = exp(-(time - flux_factor_time) / flux_factor_timescale);
+
+        particle_flux_avg = weight * particle_flux_avg + (1. - weight) * particle_flux_factor;
+        momentum_flux_avg = weight * momentum_flux_avg + (1. - weight) * momentum_flux_factor;
+        heat_flux_avg = weight * heat_flux_avg + (1. - weight) * heat_flux_factor;
+
+        particle_flux_factor = particle_flux_avg;
+        momentum_flux_factor = momentum_flux_avg;
+        heat_flux_factor = heat_flux_avg;
+      }
+      flux_factor_time = time;
+    }
   }
 
   /////////////////////////////////////////////////////
