@@ -367,12 +367,12 @@ void NeutralMixed::finally(const Options& state) {
     }
 
     // Flux of parallel momentum
-    // Question: Should flux-limited particle flux be used here, or original flux?
-    // Note: momentum flux here doesn't include pressure gradient term
+    // Note: Flux-limited particle flux is used in calculating the momentum flux before the
+    //       momentum limiter is applied.
     //
     // The resulting momentum_flux_factor is applied to the momentum advection and viscosity terms,
     // and so also scales the advection of kinetic energy
-    Vector3D momentum_flux = NVn * v_total;
+    Vector3D momentum_flux = particle_flux_factor * NVn * v_total;
     if (neutral_viscosity) {
       momentum_flux -= eta_n * Grad_perp(Vn);
     }
@@ -393,7 +393,7 @@ void NeutralMixed::finally(const Options& state) {
     //    could be in opposite directions.
     //  - Flux doesn't include compression term, or kinetic energy transport
     //    that is in the momentum equation
-    Vector3D heat_flux = (3./2) * Pn * v_total + Pn * v_perp - kappa_n * Grad(Tn);
+    Vector3D heat_flux = (3./2) * Pn * particle_flux_factor * v_total + Pn * particle_flux_factor * v_perp - kappa_n * Grad(Tn);
 
     Field3D heat_flux_abs = sqrt(heat_flux * heat_flux);
     Field3D heat_limit = Pnlim * sqrt(2. * Tnlim / (PI * AA));
@@ -418,7 +418,7 @@ void NeutralMixed::finally(const Options& state) {
   TRACE("Neutral density");
 
   // Note: Parallel and perpendicular flux scaled by limiter
-  ddt(Nn) = -FV::Div_par_mod<hermes::Limiter>(Nn, Vn * particle_flux_factor, sound_speed) // Advection
+  ddt(Nn) = -FV::Div_par_mod<hermes::Limiter>(Nn * particle_flux_factor, Vn, sound_speed) // Advection
     + FV::Div_a_Grad_perp(DnnNn * particle_flux_factor, logPnlim) // Perpendicular diffusion
     ;
 
@@ -433,10 +433,11 @@ void NeutralMixed::finally(const Options& state) {
   TRACE("Neutral momentum");
 
   ddt(NVn) =
-      -AA * FV::Div_par_fvv<hermes::Limiter>(Nnlim, Vn * momentum_flux_factor, sound_speed) // Momentum flow
-      - Grad_par(Pn)                                                 // Pressure gradient. Not included in flux limit.
-      + FV::Div_a_Grad_perp(DnnNVn * momentum_flux_factor, logPnlim) // Perpendicular diffusion
-      ;
+    // Note: The second argument (Vn) is squared in this operator, so the limiters are applied to the first argument
+    -AA * FV::Div_par_fvv<hermes::Limiter>(Nnlim * particle_flux_factor * momentum_flux_factor, Vn, sound_speed) // Momentum flow
+    - Grad_par(Pn)                                                 // Pressure gradient. Not included in flux limit.
+    + FV::Div_a_Grad_perp(DnnNVn * particle_flux_factor * momentum_flux_factor, logPnlim) // Perpendicular diffusion
+    ;
 
   if (localstate.isSet("momentum_source")) {
     Snv = get<Field3D>(localstate["momentum_source"]);
@@ -447,9 +448,9 @@ void NeutralMixed::finally(const Options& state) {
   // Neutral pressure
   TRACE("Neutral pressure");
 
-  ddt(Pn) = -FV::Div_par_mod<hermes::Limiter>(Pn, Vn * heat_flux_factor, sound_speed) // Advection
+  ddt(Pn) = -FV::Div_par_mod<hermes::Limiter>(Pn * particle_flux_factor * heat_flux_factor, Vn, sound_speed) // Advection
     - (2. / 3) * Pn * Div_par(Vn)                       // Compression
-    + FV::Div_a_Grad_perp((5. / 3) * DnnPn * heat_flux_factor, logPnlim)   // Perpendicular advection: q = 5/2 p u_perp
+    + FV::Div_a_Grad_perp((5. / 3) * DnnPn * particle_flux_factor * heat_flux_factor, logPnlim)   // Perpendicular advection: q = 5/2 p u_perp
     + (2. / 3) * (FV::Div_a_Grad_perp(kappa_n * heat_flux_factor, Tn)      // Perpendicular Conduction
                 + FV::Div_par_K_Grad_par(kappa_n * heat_flux_factor, Tn))  // Parallel conduction
       ;
