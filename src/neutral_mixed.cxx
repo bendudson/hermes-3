@@ -270,177 +270,385 @@ void NeutralMixed::finally(const Options& state) {
   logPnlim = log(Pnlim);
   logPnlim.applyBoundary();
 
-  ///////////////////////////////////////////////////////
-  // Calculate cross-field diffusion from collision frequency
-  //
-  //
-  if (localstate.isSet("collision_frequency")) {
-    // Dnn = Vth^2 / sigma
+  // Note: If linear solve then don't recalculate coefficients
+  if (!get<bool>(state["solver"]["linear"])) {
+    ///////////////////////////////////////////////////////
+    // Calculate cross-field diffusion from collision frequency
+    //
+    //
+    if (localstate.isSet("collision_frequency")) {
+      // Dnn = Vth^2 / sigma
 
-    if (maximum_mfp > 0) {   // MFP limit enabled
+      if (maximum_mfp > 0) {   // MFP limit enabled
         Field3D Rnn = sqrt(Tn / AA) / (maximum_mfp / get<BoutReal>(state["units"]["meters"]));
         Dnn = (Tn / AA) / (get<Field3D>(localstate["collision_frequency"]) + Rnn);
       } else {   // MFP limit disabled
         Dnn = (Tn / AA) / (get<Field3D>(localstate["collision_frequency"]));
       }
-      
-  } else {  // If no collisions, hardcode max MFP to 0.1m
-    output_warn.write("No collisions set for the neutrals, limiting mean free path to 0.1m");
-    Field3D Rnn = sqrt(Tn / AA) / (0.1 / get<BoutReal>(state["units"]["meters"]));
-    Dnn = (Tn / AA) / Rnn;
-  }
 
-  mesh->communicate(Dnn);
-  Dnn.clearParallelSlices();
-  Dnn.applyBoundary();
+    } else {  // If no collisions, hardcode max MFP to 0.1m
+      output_warn.write("No collisions set for the neutrals, limiting mean free path to 0.1m");
+      Field3D Rnn = sqrt(Tn / AA) / (0.1 / get<BoutReal>(state["units"]["meters"]));
+      Dnn = (Tn / AA) / Rnn;
+    }
 
-  // Neutral diffusion parameters have the same boundary condition as Dnn
-  DnnPn = Dnn * Pn;
-  DnnPn.applyBoundary();
-  DnnNn = Dnn * Nn;
-  DnnNn.applyBoundary();
-  Field3D DnnNVn = Dnn * NVn;
-  DnnNVn.applyBoundary();
+    mesh->communicate(Dnn);
+    Dnn.clearParallelSlices();
+    Dnn.applyBoundary();
 
-  if (sheath_ydown) {
-    for (RangeIterator r = mesh->iterateBndryLowerY(); !r.isDone(); r++) {
-      for (int jz = 0; jz < mesh->LocalNz; jz++) {
-        Dnn(r.ind, mesh->ystart - 1, jz) = -Dnn(r.ind, mesh->ystart, jz);
-        DnnPn(r.ind, mesh->ystart - 1, jz) = -DnnPn(r.ind, mesh->ystart, jz);
-        DnnNn(r.ind, mesh->ystart - 1, jz) = -DnnNn(r.ind, mesh->ystart, jz);
-        DnnNVn(r.ind, mesh->ystart - 1, jz) = -DnnNVn(r.ind, mesh->ystart, jz);
+    // Neutral diffusion parameters have the same boundary condition as Dnn
+    DnnPn = Dnn * Pn;
+    DnnPn.applyBoundary();
+    DnnNn = Dnn * Nn;
+    DnnNn.applyBoundary();
+    DnnNVn = Dnn * NVn;
+    DnnNVn.applyBoundary();
+
+    if (sheath_ydown) {
+      for (RangeIterator r = mesh->iterateBndryLowerY(); !r.isDone(); r++) {
+        for (int jz = 0; jz < mesh->LocalNz; jz++) {
+          Dnn(r.ind, mesh->ystart - 1, jz) = -Dnn(r.ind, mesh->ystart, jz);
+          DnnPn(r.ind, mesh->ystart - 1, jz) = -DnnPn(r.ind, mesh->ystart, jz);
+          DnnNn(r.ind, mesh->ystart - 1, jz) = -DnnNn(r.ind, mesh->ystart, jz);
+          DnnNVn(r.ind, mesh->ystart - 1, jz) = -DnnNVn(r.ind, mesh->ystart, jz);
+        }
+      }
+    }
+
+    if (sheath_yup) {
+      for (RangeIterator r = mesh->iterateBndryUpperY(); !r.isDone(); r++) {
+        for (int jz = 0; jz < mesh->LocalNz; jz++) {
+          Dnn(r.ind, mesh->yend + 1, jz) = -Dnn(r.ind, mesh->yend, jz);
+          DnnPn(r.ind, mesh->yend + 1, jz) = -DnnPn(r.ind, mesh->yend, jz);
+          DnnNn(r.ind, mesh->yend + 1, jz) = -DnnNn(r.ind, mesh->yend, jz);
+          DnnNVn(r.ind, mesh->yend + 1, jz) = -DnnNVn(r.ind, mesh->yend, jz);
+        }
+      }
+    }
+
+    // Heat conductivity
+    // Note: This is kappa_n = (5/2) * Pn / (m * nu)
+    //       where nu is the collision frequency used in Dnn
+    kappa_n = (5. / 2) * DnnNn;
+
+    // Viscosity
+    eta_n = AA * (2. / 5) * kappa_n;
+
+    // Set factors that multiply the fluxes
+    particle_flux_factor = 1.0;
+    momentum_flux_factor = 1.0;
+    heat_flux_factor = 1.0;
+    if (flux_limit) {
+      // Apply flux limiters
+      // Note: Fluxes calculated here are cell centre, rather than cell edge
+
+      // Cross-field velocity
+      Vector3D v_perp = -Dnn * Grad_perp(logPnlim);
+
+      // Total velocity, perpendicular + parallel
+      Vector3D v_total = v_perp;
+      ASSERT2(v_total.covariant == true);
+      auto* coord = mesh->getCoordinates();
+      v_total.y = Vn * (coord->J * coord->Bxy); // Set parallel component
+
+      Field3D v_sq = v_total * v_total; // v dot v
+      Field3D v_abs = sqrt(v_sq); // |v|
+
+      // Magnitude of the particle flux
+      Field3D particle_flux_abs = Nnlim * v_abs;
+
+      for (int i = mesh->xstart; i <= mesh->xend; i++) {
+        for (int j = mesh->ystart; j <= mesh->yend; j++) {
+          for (int k = 0; k < mesh->LocalNz; k++) {
+            // Calculate flux from i to i+1
+
+            BoutReal fout = 0.5 * (DnnNn(i, j, k) + DnnNn(i + 1, j, k))
+              * (sqrt(coord->g11(i, j, k))
+                 + sqrt(coord->g11(i + 1, j, k)))
+              * (logPnlim(i + 1, j, k) - logPnlim(i, j, k))
+              / (coord->dx(i, j, k) + coord->dx(i + 1, j, k));
+
+            // Calculate flux from i to i-1
+            BoutReal fin = 0.5 * (DnnNn(i, j, k) + DnnNn(i - 1, j, k))
+              * (sqrt(coord->g11(i, j, k))
+                 + sqrt(coord->g11(i - 1, j, k)))
+              * (logPnlim(i - 1, j, k) - logPnlim(i, j, k))
+              / (coord->dx(i, j, k) + coord->dx(i - 1, j, k));
+
+            // Flux from j to j+1
+            BoutReal fup = 0.5 * (DnnNn(i, j, k) + DnnNn(i, j + 1, k))
+              * (sqrt(coord->g22(i, j, k))
+                 + sqrt(coord->g22(i, j + 1, k)))
+              * (logPnlim(i, j + 1, k) - logPnlim(i, j, k))
+              / (coord->dy(i, j, k) + coord->dy(i, j + 1, k));
+
+            // Flux from j to j-1
+            BoutReal fdown = 0.5 * (DnnNn(i, j, k) + DnnNn(i, j - 1, k))
+              * (sqrt(coord->g22(i, j, k))
+                 + sqrt(coord->g22(i, j - 1, k)))
+              * (logPnlim(i, j - 1, k) - logPnlim(i, j, k))
+              / (coord->dy(i, j, k) + coord->dy(i, j - 1, k));
+
+            // Choose the maximum local particle flux,
+            // using cell center and edge values
+            particle_flux_abs(i, j, k) = BOUTMAX(particle_flux_abs(i, j, k),
+                                                 fabs(fin),
+                                                 fabs(fout),
+                                                 fabs(fup),
+                                                 fabs(fdown));
+          }
+        }
+      }
+
+      // Normalised particle flux limit
+      Field3D particle_limit = Nnlim * 0.25 * sqrt(8 * Tnlim / (PI * AA));
+
+      // Particle flux reduction factor
+      if (particle_flux_limiter) {
+        particle_flux_factor = pow(1. + pow(particle_flux_abs / (flux_limit_alpha * particle_limit),
+                                            flux_limit_gamma),
+                                   -1./flux_limit_gamma);
+      } else {
+        particle_flux_factor = 1.0;
+      }
+
+      // Flux of parallel momentum
+      // Note: Flux-limited particle flux is used in calculating the momentum flux before the
+      //       momentum limiter is applied.
+      //
+      // The resulting momentum_flux_factor is applied to the momentum advection and viscosity terms,
+      // and so also scales the advection of kinetic energy
+      Vector3D momentum_flux = particle_flux_factor * NVn * v_total;
+      if (neutral_viscosity) {
+        momentum_flux -= eta_n * Grad_perp(Vn);
+      }
+      Field3D momentum_flux_abs = sqrt(momentum_flux * momentum_flux);
+      Field3D momentum_limit = Pnlim;
+
+      if (momentum_flux_limiter) {
+        momentum_flux_factor = pow(1. + pow(momentum_flux_abs / (flux_limit_alpha * momentum_limit),
+                                            flux_limit_gamma),
+                                   -1./flux_limit_gamma);
+      } else {
+        momentum_flux_factor = 1.0;
+      }
+      // Flux of heat
+      // Note:
+      //  - Limiting the heat flux, not energy flux
+      //  - Advection and heat conduction are both vectors, and e.g
+      //    could be in opposite directions.
+      //  - Flux doesn't include compression term, or kinetic energy transport
+      //    that is in the momentum equation
+      Vector3D heat_flux = (3./2) * Pn * particle_flux_factor * v_total
+        + Pn * particle_flux_factor * v_perp
+        - kappa_n * Grad(Tn);
+
+      Field3D heat_flux_abs = sqrt(heat_flux * heat_flux);
+
+      mesh->communicate(particle_flux_factor);
+      particle_flux_factor.applyBoundary("neumann");
+
+      for (int i = mesh->xstart; i <= mesh->xend; i++) {
+        for (int j = mesh->ystart; j <= mesh->yend; j++) {
+          for (int k = 0; k < mesh->LocalNz; k++) {
+            // Calculate energy flux from i to i+1
+
+            BoutReal fout =
+              // Convection with particle flux limiter
+              (5./2) * 0.5 * (particle_flux_factor(i, j, k) * DnnPn(i, j, k) +
+                              particle_flux_factor(i + 1, j, k) * DnnPn(i + 1, j, k))
+              * (sqrt(coord->g11(i, j, k))
+                 + sqrt(coord->g11(i + 1, j, k)))
+              * (logPnlim(i + 1, j, k) - logPnlim(i, j, k))
+              / (coord->dx(i, j, k) + coord->dx(i + 1, j, k))
+              +
+              // Heat conduction
+              0.5 * (kappa_n(i, j, k) + kappa_n(i + 1, j, k))
+              * (sqrt(coord->g11(i, j, k))
+                 + sqrt(coord->g11(i + 1, j, k)))
+              * (Tn(i + 1, j, k) - Tn(i, j, k))
+              / (coord->dx(i, j, k) + coord->dx(i + 1, j, k))
+              ;
+
+            // Calculate flux from i to i-1
+            BoutReal fin =
+              // Convection
+              (5./2) * 0.5 * (particle_flux_factor(i, j, k) * DnnPn(i, j, k) +
+                              particle_flux_factor(i - 1, j, k) * DnnPn(i - 1, j, k))
+              * (sqrt(coord->g11(i, j, k))
+                 + sqrt(coord->g11(i - 1, j, k)))
+              * (logPnlim(i - 1, j, k) - logPnlim(i, j, k))
+              / (coord->dx(i, j, k) + coord->dx(i - 1, j, k))
+              +
+              // Heat conduction
+              0.5 * (kappa_n(i, j, k) + kappa_n(i - 1, j, k))
+              * (sqrt(coord->g11(i, j, k))
+                 + sqrt(coord->g11(i - 1, j, k)))
+              * (Tn(i - 1, j, k) - Tn(i, j, k))
+              / (coord->dx(i, j, k) + coord->dx(i + 1, j, k))
+              ;
+
+            // Flux from j to j+1
+            BoutReal fup =
+              // Convection
+              (5./2) * 0.5 * (particle_flux_factor(i, j, k) * DnnPn(i, j, k) +
+                              particle_flux_factor(i, j + 1, k) * DnnPn(i, j + 1, k))
+              * (sqrt(coord->g22(i, j, k))
+                 + sqrt(coord->g22(i, j + 1, k)))
+              * (logPnlim(i, j + 1, k) - logPnlim(i, j, k))
+              / (coord->dy(i, j, k) + coord->dy(i, j + 1, k))
+              +
+              // Heat conduction
+              0.5 * (kappa_n(i, j, k) + kappa_n(i, j + 1, k))
+              * (sqrt(coord->g22(i, j, k))
+                 + sqrt(coord->g22(i, j + 1, k)))
+              * (Tn(i, j + 1, k) - Tn(i, j, k))
+              / (coord->dy(i, j, k) + coord->dy(i, j + 1, k))
+              ;
+
+            // Flux from j to j-1
+            BoutReal fdown =
+              // Convection
+              (5./2) * 0.5 * (particle_flux_factor(i, j, k) * DnnPn(i, j, k) +
+                              particle_flux_factor(i, j - 1, k) * DnnPn(i, j - 1, k))
+              * (sqrt(coord->g22(i, j, k))
+                 + sqrt(coord->g22(i, j - 1, k)))
+              * (logPnlim(i, j - 1, k) - logPnlim(i, j, k))
+              / (coord->dy(i, j, k) + coord->dy(i, j - 1, k))
+              +
+              // Heat conduction
+              0.5 * (kappa_n(i, j, k) + kappa_n(i, j - 1, k))
+              * (sqrt(coord->g22(i, j, k))
+                 + sqrt(coord->g22(i, j - 1, k)))
+              * (Tn(i, j - 1, k) - Tn(i, j, k))
+              / (coord->dy(i, j, k) + coord->dy(i, j - 1, k))
+              ;
+
+            heat_flux_abs(i, j, k) = BOUTMAX(heat_flux_abs(i, j, k),
+                                             fabs(fin),
+                                             fabs(fout),
+                                             fabs(fup),
+                                             fabs(fdown));
+          }
+        }
+      }
+
+      Field3D heat_limit = Pnlim * sqrt(2. * Tnlim / (PI * AA));
+
+      if (heat_flux_limiter) {
+        heat_flux_factor = pow(1. + pow(heat_flux_abs / (flux_limit_alpha * heat_limit),
+                                        flux_limit_gamma),
+                               -1./flux_limit_gamma);
+      } else {
+        heat_flux_factor = 1.0;
+      }
+      // Communicate guard cells and apply boundary conditions
+      // because the flux factors will be differentiated
+      mesh->communicate(particle_flux_factor, momentum_flux_factor, heat_flux_factor);
+
+      // Fluxes at the boundary are not calculated correctly, so
+      // use limiting factors from one cell inwards
+      for (RangeIterator r = mesh->iterateBndryLowerY(); !r.isDone(); r++) {
+        for (int jz = 0; jz < mesh->LocalNz; jz++) {
+          particle_flux_factor(r.ind, mesh->ystart, jz) =
+            BOUTMIN(particle_flux_factor(r.ind, mesh->ystart, jz),
+                    particle_flux_factor(r.ind, mesh->ystart + 1, jz));
+          momentum_flux_factor(r.ind, mesh->ystart, jz) =
+            BOUTMIN(momentum_flux_factor(r.ind, mesh->ystart, jz),
+                    momentum_flux_factor(r.ind, mesh->ystart + 1, jz));
+          heat_flux_factor(r.ind, mesh->ystart, jz) =
+            BOUTMIN(heat_flux_factor(r.ind, mesh->ystart, jz),
+                    heat_flux_factor(r.ind, mesh->ystart + 1, jz));
+
+          // Neumann boundary conditions
+          particle_flux_factor(r.ind, mesh->ystart - 1, jz) = particle_flux_factor(r.ind, mesh->ystart, jz);
+          momentum_flux_factor(r.ind, mesh->ystart - 1, jz) = momentum_flux_factor(r.ind, mesh->ystart, jz);
+          heat_flux_factor(r.ind, mesh->ystart - 1, jz) = heat_flux_factor(r.ind, mesh->ystart, jz);
+        }
+      }
+      for (RangeIterator r = mesh->iterateBndryUpperY(); !r.isDone(); r++) {
+        for (int jz = 0; jz < mesh->LocalNz; jz++) {
+          particle_flux_factor(r.ind, mesh->yend, jz) =
+            BOUTMIN(particle_flux_factor(r.ind, mesh->yend, jz),
+                    particle_flux_factor(r.ind, mesh->yend - 1, jz));
+          momentum_flux_factor(r.ind, mesh->yend, jz) =
+            BOUTMIN(momentum_flux_factor(r.ind, mesh->yend, jz),
+                    momentum_flux_factor(r.ind, mesh->yend - 1, jz));
+          heat_flux_factor(r.ind, mesh->yend, jz) =
+            BOUTMIN(heat_flux_factor(r.ind, mesh->yend, jz),
+                    heat_flux_factor(r.ind, mesh->yend - 1, jz));
+
+          // Neumann boundary conditions
+          particle_flux_factor(r.ind, mesh->yend + 1, jz) = particle_flux_factor(r.ind, mesh->yend, jz);
+          momentum_flux_factor(r.ind, mesh->yend + 1, jz) = momentum_flux_factor(r.ind, mesh->yend, jz);
+          heat_flux_factor(r.ind, mesh->yend + 1, jz) = heat_flux_factor(r.ind, mesh->yend, jz);
+        }
+      }
+
+      if (mesh->firstX()) {
+        for (int j = mesh->ystart; j <= mesh->yend; j++) {
+          for (int k = 0; k < mesh->LocalNz; k++) {
+            particle_flux_factor(mesh->xstart, j, k) =
+              BOUTMIN(particle_flux_factor(mesh->xstart, j, k),
+                      particle_flux_factor(mesh->xstart + 1, j, k));
+            momentum_flux_factor(mesh->xstart, j, k) =
+              BOUTMIN(momentum_flux_factor(mesh->xstart, j, k),
+                      momentum_flux_factor(mesh->xstart + 1, j, k));
+            heat_flux_factor(mesh->xstart, j, k) =
+              BOUTMIN(heat_flux_factor(mesh->xstart, j, k),
+                      heat_flux_factor(mesh->xstart + 1, j, k));
+          }
+        }
+      }
+      if (mesh->lastX()) {
+        for (int j = mesh->ystart; j <= mesh->yend; j++) {
+          for (int k = 0; k < mesh->LocalNz; k++) {
+            particle_flux_factor(mesh->xend, j, k) =
+              BOUTMIN(particle_flux_factor(mesh->xend, j, k),
+                      particle_flux_factor(mesh->xend - 1, j, k));
+            momentum_flux_factor(mesh->xend, j, k) =
+              BOUTMIN(momentum_flux_factor(mesh->xend, j, k),
+                      momentum_flux_factor(mesh->xend - 1, j, k));
+            heat_flux_factor(mesh->xend, j, k) =
+              BOUTMIN(heat_flux_factor(mesh->xend, j, k),
+                      heat_flux_factor(mesh->xend - 1, j, k));
+          }
+        }
+      }
+
+      particle_flux_factor.applyBoundary("neumann");
+      momentum_flux_factor.applyBoundary("neumann");
+      heat_flux_factor.applyBoundary("neumann");
+
+      if (flux_factor_timescale > 0) {
+        // Smooth flux limitation factors over time
+        // Suppress rapid changes in flux limitation factors, while retaining
+        // the same steady-state solution.
+        BoutReal time = get<BoutReal>(state["time"]);
+        if (flux_factor_time < 0.0) {
+          // First time, so just copy values
+          particle_flux_avg = particle_flux_factor;
+          momentum_flux_avg = momentum_flux_factor;
+          heat_flux_avg = heat_flux_factor;
+        } else {
+          // Weight by a factor that depends on the elapsed time.
+          BoutReal weight = exp(-(time - flux_factor_time) / flux_factor_timescale);
+
+          particle_flux_avg = weight * particle_flux_avg + (1. - weight) * particle_flux_factor;
+          momentum_flux_avg = weight * momentum_flux_avg + (1. - weight) * momentum_flux_factor;
+          heat_flux_avg = weight * heat_flux_avg + (1. - weight) * heat_flux_factor;
+
+          particle_flux_factor = particle_flux_avg;
+          momentum_flux_factor = momentum_flux_avg;
+          heat_flux_factor = heat_flux_avg;
+        }
+        flux_factor_time = time;
       }
     }
   }
-
-  if (sheath_yup) {
-    for (RangeIterator r = mesh->iterateBndryUpperY(); !r.isDone(); r++) {
-      for (int jz = 0; jz < mesh->LocalNz; jz++) {
-        Dnn(r.ind, mesh->yend + 1, jz) = -Dnn(r.ind, mesh->yend, jz);
-        DnnPn(r.ind, mesh->yend + 1, jz) = -DnnPn(r.ind, mesh->yend, jz);
-        DnnNn(r.ind, mesh->yend + 1, jz) = -DnnNn(r.ind, mesh->yend, jz);
-        DnnNVn(r.ind, mesh->yend + 1, jz) = -DnnNVn(r.ind, mesh->yend, jz);
-      }
-    }
-  }
-
-  // Heat conductivity
-  // Note: This is kappa_n = (5/2) * Pn / (m * nu)
-  //       where nu is the collision frequency used in Dnn
-  kappa_n = (5. / 2) * DnnNn;
-
-  // Viscosity
-  eta_n = AA * (2. / 5) * kappa_n;
 
   // Sound speed appearing in Lax flux for advection terms
   Field3D sound_speed = sqrt(Tn * (5. / 3) / AA);
-
-  // Set factors that multiply the fluxes
-  particle_flux_factor = 1.0;
-  momentum_flux_factor = 1.0;
-  heat_flux_factor = 1.0;
-  if (flux_limit) {
-    // Apply flux limiters
-    // Note: Fluxes calculated here are cell centre, rather than cell edge
-
-    // Cross-field velocity
-    Vector3D v_perp = -Dnn * Grad_perp(logPnlim);
-
-    // Total velocity, perpendicular + parallel
-    Vector3D v_total = v_perp;
-    ASSERT2(v_total.covariant == true);
-    auto* coord = mesh->getCoordinates();
-    v_total.y = Vn * (coord->J * coord->Bxy); // Set parallel component
-
-    Field3D v_sq = v_perp * v_perp + SQ(Vn); // v dot v
-    Field3D v_abs = sqrt(v_sq); // |v|
-
-    // Magnitude of the particle flux
-    Field3D particle_flux_abs = Nnlim * v_abs;
-
-    // Normalised particle flux limit
-    Field3D particle_limit = Nnlim * 0.25 * sqrt(8 * Tnlim / (PI * AA));
-
-    // Particle flux reduction factor
-    if (particle_flux_limiter){
-      particle_flux_factor = pow(1. + pow(particle_flux_abs / (flux_limit_alpha * particle_limit),
-                                          flux_limit_gamma),
-                                -1./flux_limit_gamma);
-    } else {
-      particle_flux_factor = 1.0;
-    }
-
-    // Flux of parallel momentum
-    // Note: Flux-limited particle flux is used in calculating the momentum flux before the
-    //       momentum limiter is applied.
-    //
-    // The resulting momentum_flux_factor is applied to the momentum advection and viscosity terms,
-    // and so also scales the advection of kinetic energy
-    Vector3D momentum_flux = particle_flux_factor * NVn * v_total;
-    if (neutral_viscosity) {
-      momentum_flux -= eta_n * Grad_perp(Vn);
-    }
-    Field3D momentum_flux_abs = sqrt(momentum_flux * momentum_flux);
-    Field3D momentum_limit = Pnlim;
-
-    if (momentum_flux_limiter) {
-      momentum_flux_factor = pow(1. + pow(momentum_flux_abs / (flux_limit_alpha * momentum_limit),
-                                          flux_limit_gamma),
-                                -1./flux_limit_gamma);
-    } else {
-      momentum_flux_factor = 1.0;
-    }
-    // Flux of heat
-    // Note:
-    //  - Limiting the heat flux, not energy flux
-    //  - Advection and heat conduction are both vectors, and e.g
-    //    could be in opposite directions.
-    //  - Flux doesn't include compression term, or kinetic energy transport
-    //    that is in the momentum equation
-    Vector3D heat_flux = (3./2) * Pn * particle_flux_factor * v_total + Pn * particle_flux_factor * v_perp - kappa_n * Grad(Tn);
-
-    Field3D heat_flux_abs = sqrt(heat_flux * heat_flux);
-    Field3D heat_limit = Pnlim * sqrt(2. * Tnlim / (PI * AA));
-
-    if (heat_flux_limiter) {
-      heat_flux_factor = pow(1. + pow(heat_flux_abs / (flux_limit_alpha * heat_limit),
-                                      flux_limit_gamma),
-                              -1./flux_limit_gamma);
-    } else {
-      heat_flux_factor = 1.0;
-    }
-    // Communicate guard cells and apply boundary conditions
-    // because the flux factors will be differentiated
-    mesh->communicate(particle_flux_factor, momentum_flux_factor, heat_flux_factor);
-    particle_flux_factor.applyBoundary("neumann");
-    momentum_flux_factor.applyBoundary("neumann");
-    heat_flux_factor.applyBoundary("neumann");
-
-    if (flux_factor_timescale > 0) {
-      // Smooth flux limitation factors over time
-      // Suppress rapid changes in flux limitation factors, while retaining
-      // the same steady-state solution.
-      BoutReal time = get<BoutReal>(state["time"]);
-      if (flux_factor_time < 0.0) {
-        // First time, so just copy values
-        particle_flux_avg = particle_flux_factor;
-        momentum_flux_avg = momentum_flux_factor;
-        heat_flux_avg = heat_flux_factor;
-      } else {
-        // Weight by a factor that depends on the elapsed time.
-        BoutReal weight = exp(-(time - flux_factor_time) / flux_factor_timescale);
-
-        particle_flux_avg = weight * particle_flux_avg + (1. - weight) * particle_flux_factor;
-        momentum_flux_avg = weight * momentum_flux_avg + (1. - weight) * momentum_flux_factor;
-        heat_flux_avg = weight * heat_flux_avg + (1. - weight) * heat_flux_factor;
-
-        particle_flux_factor = particle_flux_avg;
-        momentum_flux_factor = momentum_flux_avg;
-        heat_flux_factor = heat_flux_avg;
-      }
-      flux_factor_time = time;
-    }
-  }
 
   /////////////////////////////////////////////////////
   // Neutral density
