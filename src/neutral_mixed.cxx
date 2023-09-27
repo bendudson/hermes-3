@@ -56,7 +56,7 @@ NeutralMixed::NeutralMixed(const std::string& name, Options& alloptions, Solver*
 
   flux_factor_timescale = options["flux_factor_timescale"]
     .doc("Time constant in flux limitation factor variation [seconds]. < 0 is off.")
-    .withDefault(-1.0) / seconds;
+    .withDefault(1e-6) / seconds;
 
   particle_flux_limiter = options["particle_flux_limiter"]
     .doc("Enable particle flux limiter?")
@@ -84,7 +84,7 @@ NeutralMixed::NeutralMixed(const std::string& name, Options& alloptions, Solver*
 
   maximum_mfp = options["maximum_mfp"]
     .doc("Optional maximum mean free path in [m] for diffusive processes. < 0 is off")
-    .withDefault(0.1);
+    .withDefault(-1.0);
 
   if (precondition) {
     inv = std::unique_ptr<Laplacian>(Laplacian::create(&options["precon_laplace"]));
