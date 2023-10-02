@@ -53,11 +53,11 @@ private:
   bool flux_limit; ///< Impose flux limiter?
   bool particle_flux_limiter, heat_flux_limiter, momentum_flux_limiter; ///< Which limiters to impose
   BoutReal maximum_mfp; ///< Maximum mean free path for diffusion. 0.1 by default, -1 is off.
-  BoutReal flux_limit_alpha;
+  BoutReal flux_limit_alpha, conductive_flux_limit_alpha, convective_flux_limit_alpha;
   BoutReal flux_limit_gamma;
   Field3D particle_flux_factor; ///< Particle flux scaling factor
   Field3D momentum_flux_factor;
-  Field3D heat_flux_factor;
+  Field3D conductive_heat_flux_factor, convective_heat_flux_factor;
 
   bool neutral_viscosity; ///< include viscosity?
 
