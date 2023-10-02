@@ -361,6 +361,9 @@ void NeutralMixed::finally(const Options& state) {
       // Magnitude of the particle flux
       Field3D particle_flux_abs = Nnlim * v_abs;
 
+      // Normalised particle flux limit
+      Field3D particle_limit = Nnlim * 0.25 * sqrt(8 * Tnlim / (PI * AA));
+
       for (int i = mesh->xstart; i <= mesh->xend; i++) {
         for (int j = mesh->ystart; j <= mesh->yend; j++) {
           for (int k = 0; k < mesh->LocalNz; k++) {
@@ -400,12 +403,15 @@ void NeutralMixed::finally(const Options& state) {
                                                  fabs(fout),
                                                  fabs(fup),
                                                  fabs(fdown));
+
+            particle_limit(i, j, k) = BOUTMIN(particle_limit(i, j, k),
+                                              particle_limit(i + 1, j, k),
+                                              particle_limit(i - 1, j, k),
+                                              particle_limit(i, j + 1, k),
+                                              particle_limit(i, j - 1, k));
           }
         }
       }
-
-      // Normalised particle flux limit
-      Field3D particle_limit = Nnlim * 0.25 * sqrt(8 * Tnlim / (PI * AA));
 
       // Particle flux reduction factor
       if (particle_flux_limiter) {
@@ -416,20 +422,75 @@ void NeutralMixed::finally(const Options& state) {
         particle_flux_factor = 1.0;
       }
 
-      // Flux of parallel momentum
-      // Note: Flux-limited particle flux is used in calculating the momentum flux before the
-      //       momentum limiter is applied.
-      //
-      // The resulting momentum_flux_factor is applied to the momentum advection and viscosity terms,
-      // and so also scales the advection of kinetic energy
-      Vector3D momentum_flux = particle_flux_factor * NVn * v_total;
-      if (neutral_viscosity) {
-        momentum_flux -= eta_n * Grad_perp(Vn);
-      }
-      Field3D momentum_flux_abs = sqrt(momentum_flux * momentum_flux);
-      Field3D momentum_limit = Pnlim;
-
       if (momentum_flux_limiter) {
+        // Flux of parallel momentum
+        // Note: Flux-limited particle flux is used in calculating the momentum flux before the
+        //       momentum limiter is applied.
+        //
+        // The resulting momentum_flux_factor is applied to the momentum advection and viscosity terms,
+        // and so also scales the advection of kinetic energy
+        Vector3D momentum_flux = particle_flux_factor * NVn * v_total;
+        if (neutral_viscosity) {
+          momentum_flux -= eta_n * Grad_perp(Vn);
+        }
+        Field3D momentum_flux_abs = sqrt(momentum_flux * momentum_flux);
+        Field3D momentum_limit = Pnlim;
+
+        for (int i = mesh->xstart; i <= mesh->xend; i++) {
+          for (int j = mesh->ystart; j <= mesh->yend; j++) {
+            for (int k = 0; k < mesh->LocalNz; k++) {
+              // Calculate conduction from i to i+1
+
+              BoutReal fout =
+                0.5 * (eta_n(i, j, k) + eta_n(i + 1, j, k))
+                * (sqrt(coord->g11(i, j, k))
+                   + sqrt(coord->g11(i + 1, j, k)))
+                * (Vn(i + 1, j, k) - Vn(i, j, k))
+                / (coord->dx(i, j, k) + coord->dx(i + 1, j, k))
+                ;
+
+              // Calculate flux from i to i-1
+              BoutReal fin =
+                0.5 * (eta_n(i, j, k) + eta_n(i - 1, j, k))
+                * (sqrt(coord->g11(i, j, k))
+                   + sqrt(coord->g11(i - 1, j, k)))
+                * (Vn(i - 1, j, k) - Vn(i, j, k))
+                / (coord->dx(i, j, k) + coord->dx(i + 1, j, k))
+                ;
+
+              // Flux from j to j+1
+              BoutReal fup =
+                0.5 * (eta_n(i, j, k) + eta_n(i, j + 1, k))
+                * (sqrt(coord->g22(i, j, k))
+                   + sqrt(coord->g22(i, j + 1, k)))
+                * (Vn(i, j + 1, k) - Vn(i, j, k))
+                / (coord->dy(i, j, k) + coord->dy(i, j + 1, k))
+                ;
+
+              // Flux from j to j-1
+              BoutReal fdown =
+                0.5 * (eta_n(i, j, k) + eta_n(i, j - 1, k))
+                * (sqrt(coord->g22(i, j, k))
+                   + sqrt(coord->g22(i, j - 1, k)))
+                * (Vn(i, j - 1, k) - Vn(i, j, k))
+                / (coord->dy(i, j, k) + coord->dy(i, j - 1, k))
+              ;
+
+              momentum_flux_abs(i, j, k) = BOUTMAX(momentum_flux_abs(i, j, k),
+                                                   fabs(fin),
+                                                   fabs(fout),
+                                                   fabs(fup),
+                                                   fabs(fdown));
+
+              momentum_limit(i, j, k) = BOUTMIN(momentum_limit(i, j, k),
+                                                momentum_limit(i + 1, j, k),
+                                                momentum_limit(i - 1, j, k),
+                                                momentum_limit(i, j + 1, k),
+                                                momentum_limit(i, j - 1, k));
+            }
+          }
+        }
+
         momentum_flux_factor = pow(1. + pow(momentum_flux_abs / (flux_limit_alpha * momentum_limit),
                                             flux_limit_gamma),
                                    -1./flux_limit_gamma);
@@ -553,7 +614,8 @@ void NeutralMixed::finally(const Options& state) {
         Vector3D conduction_flux = kappa_n * Grad(Tn);
 
         Field3D conduction_flux_abs = sqrt(conduction_flux * conduction_flux);
-
+        Field3D conduction_limit = Pnlim * sqrt(2. * Tnlim / (PI * AA));
+        
         for (int i = mesh->xstart; i <= mesh->xend; i++) {
           for (int j = mesh->ystart; j <= mesh->yend; j++) {
             for (int k = 0; k < mesh->LocalNz; k++) {
@@ -599,11 +661,15 @@ void NeutralMixed::finally(const Options& state) {
                                                      fabs(fout),
                                                      fabs(fup),
                                                      fabs(fdown));
+
+              conduction_limit(i, j, k) = BOUTMIN(conduction_limit(i, j, k),
+                                                  conduction_limit(i + 1, j, k),
+                                                  conduction_limit(i - 1, j, k),
+                                                  conduction_limit(i, j + 1, k),
+                                                  conduction_limit(i, j - 1, k));
             }
           }
         }
-
-        Field3D conduction_limit = Pnlim * sqrt(2. * Tnlim / (PI * AA));
 
         conduction_flux_factor = pow(1. + pow(conduction_flux_abs / (flux_limit_alpha * conduction_limit),
                                               flux_limit_gamma),
@@ -784,8 +850,12 @@ void NeutralMixed::finally(const Options& state) {
   ddt(Pn) += Sp;
 
   if (neutral_viscosity) {
-    Field3D momentum_source = FV::Div_a_Grad_perp(eta_n * momentum_flux_factor, Vn)    // Perpendicular viscosity
-              + FV::Div_par_K_Grad_par(eta_n * momentum_flux_factor, Vn) // Parallel viscosity
+    // Modify eta_n so eta_n = AA * (2. / 5) * kappa_n;
+    Field3D viscosity_factor = heat_flux_factor * conduction_flux_factor / momentum_flux_factor;
+
+    Field3D momentum_source =
+      FV::Div_a_Grad_perp(eta_n * momentum_flux_factor * viscosity_factor, Vn)    // Perpendicular viscosity
+      + FV::Div_par_K_Grad_par(eta_n * momentum_flux_factor, Vn) // Parallel viscosity
       ;
 
     ddt(NVn) += momentum_source; // Viscosity
