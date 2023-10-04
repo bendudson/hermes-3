@@ -43,13 +43,27 @@ private:
 
   Field3D Dnn; ///< Diffusion coefficient
   Field3D DnnNn, DnnPn, DnnTn, DnnNVn; ///< Used for operators
+  Field3D eta_n; ///< Viscosity
+  Field3D kappa_n; ///< Thermal conductivity
 
   bool sheath_ydown, sheath_yup;
 
   BoutReal nn_floor; ///< Minimum Nn used when dividing NVn by Nn to get Vn.
 
-  BoutReal flux_limit; ///< Diffusive flux limit
-  BoutReal diffusion_limit;    ///< Maximum diffusion coefficient
+  bool flux_limit; ///< Impose flux limiter?
+  bool particle_flux_limiter, heat_flux_limiter, momentum_flux_limiter; ///< Which limiters to impose
+  BoutReal maximum_mfp; ///< Maximum mean free path for diffusion. 0.1 by default, -1 is off.
+  BoutReal flux_limit_alpha;
+  BoutReal flux_limit_gamma;
+  Field3D particle_flux_factor; ///< Particle flux scaling factor
+  Field3D momentum_flux_factor;
+  Field3D heat_flux_factor;
+
+  BoutReal flux_factor_timescale; ///< Timescale over which flux factors vary
+  BoutReal flux_factor_time {-1.0}; ///< Last time the flux factors were updated
+  Field3D particle_flux_avg; ///< Moving average flux factor
+  Field3D momentum_flux_avg; ///< Moving average flux factor
+  Field3D heat_flux_avg; ///< Moving average flux factor
 
   bool neutral_viscosity; ///< include viscosity?
 
