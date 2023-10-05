@@ -86,6 +86,10 @@ NeutralMixed::NeutralMixed(const std::string& name, Options& alloptions, Solver*
     .doc("Scale convection flux limiter")
     .withDefault(1.0);
 
+  mom_flux_limit_alpha = options["momentum_flux_limit_alpha"]
+    .doc("Scale momentum flux limiter")
+    .withDefault(1.0);
+
   flux_limit_gamma = options["flux_limit_gamma"]
     .doc("Higher values increase sharpness of flux limiting")
     .withDefault(2.0);
@@ -398,7 +402,7 @@ void NeutralMixed::finally(const Options& state) {
     Field3D momentum_limit = Pnlim;
 
     if (momentum_flux_limiter) {
-      momentum_flux_factor = pow(1. + pow(momentum_flux_abs / (flux_limit_alpha * momentum_limit),
+      momentum_flux_factor = pow(1. + pow(momentum_flux_abs / (mom_flux_limit_alpha * momentum_limit),
                                           flux_limit_gamma),
                                 -1./flux_limit_gamma);
     } else {
