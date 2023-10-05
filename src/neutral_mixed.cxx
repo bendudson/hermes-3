@@ -433,7 +433,7 @@ void NeutralMixed::finally(const Options& state) {
     Field3D conv_heat_limit = Pnlim * sqrt(2. * Tnlim / (PI * AA));
 
     if (heat_flux_limiter) {
-      conv_heat_flux_factor = pow(1. + pow(heat_flux_abs / (flux_limit_alpha * heat_limit),
+      conv_heat_flux_factor = pow(1. + pow(conv_heat_flux_abs / (conv_flux_limit_alpha * conv_heat_limit),
                                       flux_limit_gamma),
                               -1./flux_limit_gamma);
     } else {
@@ -441,13 +441,13 @@ void NeutralMixed::finally(const Options& state) {
     }
 
     // Conductive heat flux
-    Vector3D cond_heat_flux = (3./2) * Pn * particle_flux_factor * v_total + Pn * particle_flux_factor * v_perp;
+    Vector3D cond_heat_flux = kappa_n * Grad(Tn);
 
     Field3D cond_heat_flux_abs = sqrt(cond_heat_flux * cond_heat_flux);
     Field3D cond_heat_limit = Pnlim * sqrt(2. * Tnlim / (PI * AA));
 
     if (heat_flux_limiter) {
-      cond_heat_flux_factor = pow(1. + pow(heat_flux_abs / (flux_limit_alpha * heat_limit),
+      cond_heat_flux_factor = pow(1. + pow(cond_heat_flux_abs / (cond_flux_limit_alpha * cond_heat_limit),
                                       flux_limit_gamma),
                               -1./flux_limit_gamma);
     } else {
