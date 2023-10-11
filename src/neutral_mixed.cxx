@@ -54,10 +54,6 @@ NeutralMixed::NeutralMixed(const std::string& name, Options& alloptions, Solver*
     .doc("Use isotropic flux limiters?")
     .withDefault(true);
 
-  flux_factor_timescale = options["flux_factor_timescale"]
-    .doc("Time constant in flux limitation factor variation [seconds]. < 0 is off.")
-    .withDefault(-1.0) / seconds;
-
   particle_flux_limiter = options["particle_flux_limiter"]
     .doc("Enable particle flux limiter?")
     .withDefault(true);
@@ -70,25 +66,17 @@ NeutralMixed::NeutralMixed(const std::string& name, Options& alloptions, Solver*
     .doc("Enable momentum flux limiter?")
     .withDefault(true);
 
-  separate_heat_limiters = options["separate_heat_limiters"]
-    .doc("Separate heat flux limiters between conduction and convection?")
-    .withDefault(false);
-
   flux_limit_alpha = options["flux_limit_alpha"]
     .doc("Scale flux limits")
     .withDefault(1.0);
 
-  cond_flux_limit_alpha = options["conduction_flux_limit_alpha"]
-    .doc("Scale conduction flux limiter")
-    .withDefault(1.0);
-
-  conv_flux_limit_alpha = options["convection_flux_limit_alpha"]
-    .doc("Scale convection flux limiter")
-    .withDefault(1.0);
+  heat_flux_limit_alpha = options["heat_flux_limit_alpha"]
+    .doc("Scale heat flux limiter")
+    .withDefault(flux_limit_alpha);
 
   mom_flux_limit_alpha = options["momentum_flux_limit_alpha"]
     .doc("Scale momentum flux limiter")
-    .withDefault(1.0);
+    .withDefault(flux_limit_alpha);
 
   flux_limit_gamma = options["flux_limit_gamma"]
     .doc("Higher values increase sharpness of flux limiting")
@@ -166,7 +154,6 @@ NeutralMixed::NeutralMixed(const std::string& name, Options& alloptions, Solver*
   DnnPn.setBoundary(std::string("Dnn") + name);
   DnnTn.setBoundary(std::string("Dnn") + name);
   DnnNVn.setBoundary(std::string("Dnn") + name);
-
 }
 
 void NeutralMixed::transform(Options& state) {
@@ -355,8 +342,7 @@ void NeutralMixed::finally(const Options& state) {
   particle_flux_factor = 1.0;
   momentum_flux_factor = 1.0;
   heat_flux_factor = 1.0;
-  cond_heat_flux_factor = 1.0;
-  conv_heat_flux_factor = 1.0;
+
   if (flux_limit) {
     // Apply flux limiters
     // Note: Fluxes calculated here are cell centre, rather than cell edge
@@ -364,23 +350,26 @@ void NeutralMixed::finally(const Options& state) {
     // Cross-field velocity
     Vector3D v_perp = -Dnn * Grad_perp(logPnlim);
 
-    // Total velocity, perpendicular + parallel
-    Vector3D v_total = v_perp;
-    ASSERT2(v_total.covariant == true);
+    // Parallel velocity
+    Vector3D v_par;
     auto* coord = mesh->getCoordinates();
-    v_total.y = Vn * (coord->J * coord->Bxy); // Set parallel component
-
-    Field3D v_sq = v_perp * v_perp + SQ(Vn); // v dot v
-    Field3D v_abs = sqrt(v_sq); // |v|
-
-    // Magnitude of the particle flux
-    Field3D particle_flux_abs = Nnlim * v_abs;
-
-    // Normalised particle flux limit
-    Field3D particle_limit = Nnlim * 0.25 * sqrt(8 * Tnlim / (PI * AA));
+    v_par.covariant = true;
+    v_par.x = 0;
+    v_par.y = Vn * (coord->J * coord->Bxy);
+    v_par.z = 0;
 
     // Particle flux reduction factor
-    if (particle_flux_limiter){
+    if (particle_flux_limiter) {
+      // Total velocity, perpendicular + parallel
+      Vector3D v_total = v_perp + v_par;
+      Field3D v_abs = sqrt(v_total * v_total); // |v dot v|
+
+      // Magnitude of the particle flux
+      Field3D particle_flux_abs = Nnlim * v_abs;
+
+      // Normalised particle flux limit
+      Field3D particle_limit = Nnlim * 0.25 * sqrt(8 * Tnlim / (PI * AA));
+  
       particle_flux_factor = pow(1. + pow(particle_flux_abs / (flux_limit_alpha * particle_limit),
                                           flux_limit_gamma),
                                 -1./flux_limit_gamma);
@@ -388,123 +377,60 @@ void NeutralMixed::finally(const Options& state) {
       particle_flux_factor = 1.0;
     }
 
-    // Flux of parallel momentum
-    // Note: Flux-limited particle flux is used in calculating the momentum flux before the
-    //       momentum limiter is applied.
-    //
-    // The resulting momentum_flux_factor is applied to the momentum advection and viscosity terms,
-    // and so also scales the advection of kinetic energy
-    Vector3D momentum_flux = particle_flux_factor * NVn * v_total;
-    if (neutral_viscosity) {
-      momentum_flux -= eta_n * Grad_perp(Vn);
-    }
-    Field3D momentum_flux_abs = sqrt(momentum_flux * momentum_flux);
-    Field3D momentum_limit = Pnlim;
-
     if (momentum_flux_limiter) {
+      // Flux of parallel momentum
+      // Note: The perpendicular particle flux is scaled by particle_flux factor.
+      //       The resulting momentum flux factor then only applies to viscosity
+      //       (parallel and perpendicular)
+      Vector3D momentum_flux = NVn * (v_par + particle_flux_factor * v_perp);
+      if (neutral_viscosity) {
+        // Both perpendicular and parallel viscosity
+        momentum_flux -= eta_n * Grad(Vn);
+      }
+      Field3D momentum_flux_abs = sqrt(momentum_flux * momentum_flux);
+      Field3D momentum_limit = Pnlim;
+
       momentum_flux_factor = pow(1. + pow(momentum_flux_abs / (mom_flux_limit_alpha * momentum_limit),
                                           flux_limit_gamma),
                                 -1./flux_limit_gamma);
     } else {
       momentum_flux_factor = 1.0;
     }
-    // Flux of heat
-    // Note:
-    //  - Limiting the heat flux, not energy flux
-    //  - Advection and heat conduction are both vectors, and e.g
-    //    could be in opposite directions.
-    //  - Flux doesn't include compression term, or kinetic energy transport
-    //    that is in the momentum equation
-
-    // Total heat flux
-    Vector3D heat_flux = (3./2) * Pn * particle_flux_factor * v_total + Pn * particle_flux_factor * v_perp - kappa_n * Grad(Tn);
-
-    Field3D heat_flux_abs = sqrt(heat_flux * heat_flux);
-    Field3D heat_limit = Pnlim * sqrt(2. * Tnlim / (PI * AA));
 
     if (heat_flux_limiter) {
-      heat_flux_factor = pow(1. + pow(heat_flux_abs / (flux_limit_alpha * heat_limit),
+      // Apply limiter to flux of heat
+      // Note:
+      //  - Limiter calculated using perpendicular particle flux limiter
+      //  - Only applied to conduction term (parallel & perpendicular)
+      Vector3D heat_flux = (3./2) * Pn * v_par
+        + (5./2) * Pn * particle_flux_factor * v_perp
+        - kappa_n * Grad(Tn);
+
+      Field3D heat_flux_abs = sqrt(heat_flux * heat_flux);
+
+      Field3D heat_limit = Pnlim * sqrt(2. * Tnlim / (PI * AA));
+
+      heat_flux_factor = pow(1. + pow(heat_flux_abs / (heat_flux_limit_alpha * heat_limit),
                                       flux_limit_gamma),
                               -1./flux_limit_gamma);
     } else {
       heat_flux_factor = 1.0;
     }
 
-    // Convective heat flux
-    Vector3D conv_heat_flux = (3./2) * Pn * particle_flux_factor * v_total + Pn * particle_flux_factor * v_perp;
-
-    Field3D conv_heat_flux_abs = sqrt(conv_heat_flux * conv_heat_flux);
-    Field3D conv_heat_limit = Pnlim * sqrt(2. * Tnlim / (PI * AA));
-
-    if (heat_flux_limiter) {
-      conv_heat_flux_factor = pow(1. + pow(conv_heat_flux_abs / (conv_flux_limit_alpha * conv_heat_limit),
-                                      flux_limit_gamma),
-                              -1./flux_limit_gamma);
-    } else {
-      conv_heat_flux_factor = 1.0;
-    }
-
-    // Conductive heat flux
-    Vector3D cond_heat_flux = kappa_n * Grad(Tn);
-
-    Field3D cond_heat_flux_abs = sqrt(cond_heat_flux * cond_heat_flux);
-    Field3D cond_heat_limit = Pnlim * sqrt(2. * Tnlim / (PI * AA));
-
-    if (heat_flux_limiter) {
-      cond_heat_flux_factor = pow(1. + pow(cond_heat_flux_abs / (cond_flux_limit_alpha * cond_heat_limit),
-                                      flux_limit_gamma),
-                              -1./flux_limit_gamma);
-    } else {
-      cond_heat_flux_factor = 1.0;
-    }
-
     // Communicate guard cells and apply boundary conditions
     // because the flux factors will be differentiated
-    mesh->communicate(particle_flux_factor, momentum_flux_factor, heat_flux_factor, cond_heat_flux_factor, conv_heat_flux_factor);
+    mesh->communicate(particle_flux_factor, momentum_flux_factor, heat_flux_factor);
     particle_flux_factor.applyBoundary("neumann");
     momentum_flux_factor.applyBoundary("neumann");
     heat_flux_factor.applyBoundary("neumann");
-    cond_heat_flux_factor.applyBoundary("neumann");
-    conv_heat_flux_factor.applyBoundary("neumann");
-
-    if (flux_factor_timescale > 0) {
-      // Smooth flux limitation factors over time
-      // Suppress rapid changes in flux limitation factors, while retaining
-      // the same steady-state solution.
-      BoutReal time = get<BoutReal>(state["time"]);
-      if (flux_factor_time < 0.0) {
-        // First time, so just copy values
-        particle_flux_avg = particle_flux_factor;
-        momentum_flux_avg = momentum_flux_factor;
-        heat_flux_avg = heat_flux_factor;
-        cond_heat_flux_avg = cond_heat_flux_factor;
-        conv_heat_flux_avg = conv_heat_flux_factor;
-      } else {
-        // Weight by a factor that depends on the elapsed time.
-        BoutReal weight = exp(-(time - flux_factor_time) / flux_factor_timescale);
-
-        particle_flux_avg = weight * particle_flux_avg + (1. - weight) * particle_flux_factor;
-        momentum_flux_avg = weight * momentum_flux_avg + (1. - weight) * momentum_flux_factor;
-        heat_flux_avg = weight * heat_flux_avg + (1. - weight) * heat_flux_factor;
-        cond_heat_flux_avg = weight * cond_heat_flux_avg + (1. - weight) * heat_flux_factor;
-        conv_heat_flux_avg = weight * conv_heat_flux_avg + (1. - weight) * heat_flux_factor;
-
-        particle_flux_factor = particle_flux_avg;
-        momentum_flux_factor = momentum_flux_avg;
-        heat_flux_factor = heat_flux_avg;
-        cond_heat_flux_factor = cond_heat_flux_avg;
-        conv_heat_flux_factor = conv_heat_flux_avg;
-      }
-      flux_factor_time = time;
-    }
   }
 
   /////////////////////////////////////////////////////
   // Neutral density
   TRACE("Neutral density");
 
-  // Note: Parallel and perpendicular flux scaled by limiter
-  ddt(Nn) = -FV::Div_par_mod<hermes::Limiter>(Nn * particle_flux_factor, Vn, sound_speed) // Advection
+  // Note: Only perpendicular flux scaled by limiter
+  ddt(Nn) = -FV::Div_par_mod<hermes::Limiter>(Nn, Vn, sound_speed) // Advection
     + FV::Div_a_Grad_perp(DnnNn * particle_flux_factor, logPnlim) // Perpendicular diffusion
     ;
 
@@ -518,11 +444,11 @@ void NeutralMixed::finally(const Options& state) {
   // Neutral momentum
   TRACE("Neutral momentum");
 
+  // Perpendicular advection scaled by particle flux limit
   ddt(NVn) =
-    // Note: The second argument (Vn) is squared in this operator, so the limiters are applied to the first argument
-    -AA * FV::Div_par_fvv<hermes::Limiter>(Nnlim * particle_flux_factor * momentum_flux_factor, Vn, sound_speed) // Momentum flow
-    - Grad_par(Pn)                                                 // Pressure gradient. Not included in flux limit.
-    + FV::Div_a_Grad_perp(DnnNVn * particle_flux_factor * momentum_flux_factor, logPnlim) // Perpendicular diffusion
+    -AA * FV::Div_par_fvv<hermes::Limiter>(Nnlim, Vn, sound_speed) // Momentum flow
+    - Grad_par(Pn)                                                 // Pressure gradient.
+    + FV::Div_a_Grad_perp(DnnNVn * particle_flux_factor, logPnlim) // Perpendicular diffusion
     ;
 
   if (localstate.isSet("momentum_source")) {
@@ -534,21 +460,14 @@ void NeutralMixed::finally(const Options& state) {
   // Neutral pressure
   TRACE("Neutral pressure");
 
-  if (separate_heat_limiters) {
-    ddt(Pn) = -FV::Div_par_mod<hermes::Limiter>(Pn * particle_flux_factor * conv_heat_flux_factor, Vn, sound_speed) // Advection
-      - (2. / 3) * Pn * Div_par(Vn)                       // Compression
-      + FV::Div_a_Grad_perp((5. / 3) * DnnPn * particle_flux_factor * conv_heat_flux_factor, logPnlim)   // Perpendicular advection: q = 5/2 p u_perp
-      + (2. / 3) * (FV::Div_a_Grad_perp(kappa_n * cond_heat_flux_factor, Tn)      // Perpendicular Conduction
-                  + FV::Div_par_K_Grad_par(kappa_n * cond_heat_flux_factor, Tn))  // Parallel conduction
-        ;
-  } else {
-    ddt(Pn) = -FV::Div_par_mod<hermes::Limiter>(Pn * particle_flux_factor * heat_flux_factor, Vn, sound_speed) // Advection
-      - (2. / 3) * Pn * Div_par(Vn)                       // Compression
-      + FV::Div_a_Grad_perp((5. / 3) * DnnPn * particle_flux_factor * heat_flux_factor, logPnlim)   // Perpendicular advection: q = 5/2 p u_perp
-      + (2. / 3) * (FV::Div_a_Grad_perp(kappa_n * heat_flux_factor, Tn)      // Perpendicular Conduction
+  // Perpendicular advection scaled by particle_flux_factor
+  // Perpendicular and parallel conduction scaled by heat_flux_factor
+  ddt(Pn) = -FV::Div_par_mod<hermes::Limiter>(Pn, Vn, sound_speed) // Advection
+    - (2. / 3) * Pn * Div_par(Vn)                       // Compression
+    + FV::Div_a_Grad_perp((5. / 3) * DnnPn * particle_flux_factor, logPnlim)   // Perpendicular advection: q = 5/2 p u_perp
+    + (2. / 3) * (FV::Div_a_Grad_perp(kappa_n * heat_flux_factor, Tn)      // Perpendicular Conduction
                   + FV::Div_par_K_Grad_par(kappa_n * heat_flux_factor, Tn))  // Parallel conduction
-        ;
-  }
+    ;
 
   Sp = pressure_source;
   if (localstate.isSet("energy_source")) {
@@ -557,6 +476,7 @@ void NeutralMixed::finally(const Options& state) {
   ddt(Pn) += Sp;
 
   if (neutral_viscosity) {
+    // Scaled by momentum flux factor
     Field3D momentum_source = FV::Div_a_Grad_perp(eta_n * momentum_flux_factor, Vn)    // Perpendicular viscosity
               + FV::Div_par_K_Grad_par(eta_n * momentum_flux_factor, Vn) // Parallel viscosity
       ;
@@ -736,33 +656,14 @@ void NeutralMixed::outputVars(Options& state) {
                     {"species", name},
                     {"source", "neutral_mixed"}});
 
-    if (separate_heat_limiters) {
-      set_with_attrs(state[std::string("conductive_heat_flux_factor_") + name], cond_heat_flux_factor,
+    set_with_attrs(state[std::string("heat_flux_factor_") + name], heat_flux_factor,
                    {{"time_dimension", "t"},
                     {"units", ""},
                     {"conversion", 1.0},
                     {"standard_name", "flux factor"},
-                    {"long_name", name + " conductive heat flux factor"},
+                    {"long_name", name + " heat flux factor"},
                     {"species", name},
                     {"source", "neutral_mixed"}});
-      set_with_attrs(state[std::string("convective_heat_flux_factor_") + name], conv_heat_flux_factor,
-                   {{"time_dimension", "t"},
-                    {"units", ""},
-                    {"conversion", 1.0},
-                    {"standard_name", "flux factor"},
-                    {"long_name", name + " convective heat flux factor"},
-                    {"species", name},
-                    {"source", "neutral_mixed"}});
-    } else {
-      set_with_attrs(state[std::string("heat_flux_factor_") + name], heat_flux_factor,
-                    {{"time_dimension", "t"},
-                      {"units", ""},
-                      {"conversion", 1.0},
-                      {"standard_name", "flux factor"},
-                      {"long_name", name + " heat flux factor"},
-                      {"species", name},
-                      {"source", "neutral_mixed"}});
-    }
   }
 }
 
