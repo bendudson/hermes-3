@@ -15,14 +15,14 @@ struct SheathBoundaryPenalty : public Component {
   /// # Reads from the mesh
   /// - penalty_mask[x,y,z]    A 3D field defining the shape of the boundary
   ///                          Equal 0 inside the plasma, 1 in the wall
-  SheathBoundaryPenalty(std::string name, Options &options, Solver *);
+  SheathBoundaryPenalty(std::string name, Options& options, Solver*);
 
   /// # Inputs
   ///
   /// # Outputs
   ///
   ///
-  void transform(Options &state) override;
+  void transform(Options& state) override;
 
 private:
   /// Mask function that is 0 in the plasma, 1 in the wall
@@ -30,6 +30,8 @@ private:
 
   /// Cell indices where penalty_mask > 0
   Region<Ind3D> penalty_region;
+
+  BoutReal gamma_e, gamma_i; // Sheath heat transmission factors
 };
 
 namespace {
