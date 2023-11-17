@@ -8,10 +8,10 @@ MXG = 0  # No guard cells in X
 
 [mesh]
 nx = 1
-ny = 44   # Resolution along field-line
+ny = 40   # Resolution along field-line
 nz = 1
 
-length = 11           # Length of the domain in meters
+length = 10           # Length of the domain in meters
 length_xpt = 10   # Length from midplane to X-point [m]
 
 # Parallel grid spacing
@@ -19,8 +19,6 @@ dy = length / ny
 
 # Calculate where the source ends in grid index
 y_xpt = 2pi * length_xpt / length
-
-penalty_mask = H(y - y_xpt)
 
 ixseps1 = -1
 ixseps2 = -1
@@ -33,7 +31,7 @@ ixseps2 = -1
 #    on the electrons
 components = (d+, e,
               collisions,
-              sheath_boundary_penalty,
+              sheath_boundary_simple,
               electron_force_balance)
 
 loadmetric = false        # Use Rxy, Bpxy etc?
@@ -45,14 +43,27 @@ Tnorm = 10
 
 [solver]
 type = cvode
+mxstep=1e5
 
-mxstep = 1e5
+[sheath_boundary_simple]
+lower_y = false
+upper_y = true
+
+gamma_e = 5/2
+gamma_i = 5/2 + 5/3
+
+# Note: Adiabatic expansion because no heat conduction
+sheath_ion_polytropic = 5/3
+sheath_electron_polytropic = 5/3
 
 ####################################
 
 [d+]  # Deuterium ions
-type = (evolve_density, evolve_pressure, evolve_momentum,
+type = (evolve_density, evolve_momentum, evolve_energy,
         noflow_boundary)
+
+noflow_lower_y = true
+noflow_upper_y = false  # Sheath boundary at upper y
 
 charge = 1
 AA = 2
@@ -69,12 +80,12 @@ flux = 1e23  # Particle flux in particles / m^2
 
 source = H(mesh:y_xpt - y) * flux / mesh:length_xpt
 
-[Pd+]
+[Ed+]
 function = 1
 
 powerflux = 1e6  # Input power flux in W/m^2
 
-source = (powerflux*2/3 / (mesh:length_xpt))*H(mesh:y_xpt - y)  # Input power as function of y
+source = (powerflux / (mesh:length_xpt))*H(mesh:y_xpt - y)  # Input power as function of y
 
 [NVd+]
 
@@ -83,7 +94,10 @@ function = 0
 ####################################
 
 [e] # Electrons
-type = quasineutral, zero_current, evolve_pressure, noflow_boundary
+type = quasineutral, zero_current, evolve_energy, noflow_boundary
+
+noflow_lower_y = true
+noflow_upper_y = false  # Sheath boundary at upper y
 
 charge = -1
 AA = 1/1836
@@ -92,9 +106,9 @@ thermal_conduction = false  # in evolve_pressure
 
 diagnose = true
 
-[Pe]
+[Ee]
 
-function = `Pd+:function`  # Same as ion pressure initially
+function = `Ed+:function`  # Same as ion pressure initially
 
-source = `Pd+:source`  # Same as ion pressure source
+source = `Ed+:source`  # Same as ion pressure source
 

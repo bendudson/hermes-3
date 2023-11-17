@@ -104,6 +104,8 @@ AA = 1/1836
 
 thermal_conduction = false  # in evolve_pressure
 
+diagnose = true
+
 [Pe]
 
 function = `Pd+:function`  # Same as ion pressure initially

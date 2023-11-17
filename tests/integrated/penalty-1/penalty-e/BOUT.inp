@@ -43,6 +43,10 @@ Nnorm = 1e19
 Bnorm = 1
 Tnorm = 10
 
+[sheath_boundary_penalty]
+gamma_e = 5/2
+gamma_i = 5/2
+
 [solver]
 type = cvode
 
@@ -51,7 +55,7 @@ mxstep = 1e5
 ####################################
 
 [d+]  # Deuterium ions
-type = (evolve_density, evolve_pressure, evolve_momentum,
+type = (evolve_density, evolve_momentum, evolve_energy,
         noflow_boundary)
 
 charge = 1
@@ -69,12 +73,12 @@ flux = 1e23  # Particle flux in particles / m^2
 
 source = H(mesh:y_xpt - y) * flux / mesh:length_xpt
 
-[Pd+]
+[Ed+]
 function = 1
 
 powerflux = 1e6  # Input power flux in W/m^2
 
-source = (powerflux*2/3 / (mesh:length_xpt))*H(mesh:y_xpt - y)  # Input power as function of y
+source = (powerflux / (mesh:length_xpt))*H(mesh:y_xpt - y)  # Input power as function of y
 
 [NVd+]
 
@@ -83,7 +87,7 @@ function = 0
 ####################################
 
 [e] # Electrons
-type = quasineutral, zero_current, evolve_pressure, noflow_boundary
+type = quasineutral, zero_current, evolve_energy, noflow_boundary
 
 charge = -1
 AA = 1/1836
@@ -92,9 +96,9 @@ thermal_conduction = false  # in evolve_pressure
 
 diagnose = true
 
-[Pe]
+[Ee]
 
-function = `Pd+:function`  # Same as ion pressure initially
+function = `Ed+:function`  # Same as ion pressure initially
 
-source = `Pd+:source`  # Same as ion pressure source
+source = `Ed+:source`  # Same as ion pressure source
 

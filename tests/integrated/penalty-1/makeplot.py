@@ -10,7 +10,7 @@ axs = axs.flatten()
 
 varlist = ["Nd+", "NVd+", "Pd+", "Pe"]
 
-for path in ["sheath", "penalty"]:
+for path in ["sheath", "penalty", "penalty-e", "sheath-e"]:
   dy = collect("dy", path=path, info=False).squeeze()
   position = 0.5 * dy
   position[1:] += 0.5 * dy[:-1]
