@@ -18,7 +18,7 @@ struct AmjuelHydIonisation : public AmjuelReaction {
 
 /// Hydrogen ionisation
 /// Templated on a char to allow 'h', 'd' and 't' species to be treated with the same code
-template <char Isotope>
+template <char Isotope, char Kind>
 struct AmjuelHydIonisationIsotope : public AmjuelHydIonisation {
   AmjuelHydIonisationIsotope(std::string name, Options& alloptions, Solver* solver)
       : AmjuelHydIonisation(name, alloptions, solver) {
@@ -30,7 +30,15 @@ struct AmjuelHydIonisationIsotope : public AmjuelHydIonisation {
 
   void transform(Options& state) override {
     Options& electron = state["species"]["e"];
-    Options& atom = state["species"][{Isotope}];     // e.g. "h"
+    Options& atom = state["species"][{Isotope}];     // Cold neutral, e.g. "h"
+
+    if (Kind == '*') {
+      Options& atom = state["species"][{Isotope, Kind}];     // Hot neutral, e.g. "h*"
+    } 
+    // else {
+    //   Options& atom = state["species"][{Isotope}];     // Cold neutral, e.g. "h"
+    // }
+    
     Options& ion = state["species"][{Isotope, '+'}]; // e.g. "h+"
     Field3D reaction_rate, momentum_exchange, energy_exchange, energy_loss;
 
@@ -60,7 +68,11 @@ struct AmjuelHydIonisationIsotope : public AmjuelHydIonisation {
       std::string atom{Isotope};
       std::string ion{Isotope, '+'};
 
-      set_with_attrs(state[{'S', Isotope, '+', '_', 'i', 'z'}], S,
+      // Hot neutrals have a * appended to the name
+      if (Kind == '*') {
+        atom = atom + '*';
+      }
+      set_with_attrs(state[std::string("S") + atom + ion + std::string("_iz")], S,
                      {{"time_dimension", "t"},
                       {"units", "m^-3 s^-1"},
                       {"conversion", Nnorm * Omega_ci},
@@ -69,7 +81,7 @@ struct AmjuelHydIonisationIsotope : public AmjuelHydIonisation {
                       {"source", "amjuel_hyd_ionisation"}});
 
       set_with_attrs(
-          state[{'F', Isotope, '+', '_', 'i', 'z'}], F,
+          state[std::string("F") + atom + ion + std::string("_iz")], F,
           {{"time_dimension", "t"},
            {"units", "kg m^-2 s^-2"},
            {"conversion", SI::Mp * Nnorm * Cs0 * Omega_ci},
@@ -78,7 +90,7 @@ struct AmjuelHydIonisationIsotope : public AmjuelHydIonisation {
                           + " to " + ion)},
            {"source", "amjuel_hyd_ionisation"}});
 
-      set_with_attrs(state[{'E', Isotope, '+', '_', 'i', 'z'}], E,
+      set_with_attrs(state[std::string("E") + atom + ion + std::string("_iz")], E,
                      {{"time_dimension", "t"},
                       {"units", "W / m^3"},
                       {"conversion", Pnorm * Omega_ci},
@@ -87,7 +99,7 @@ struct AmjuelHydIonisationIsotope : public AmjuelHydIonisation {
                                      + atom + " to " + ion)},
                       {"source", "amjuel_hyd_ionisation"}});
 
-      set_with_attrs(state[{'R', Isotope, '+', '_', 'e', 'x'}], R,
+      set_with_attrs(state[std::string("R") + atom + ion + std::string("_ex")], R,
                      {{"time_dimension", "t"},
                       {"units", "W / m^3"},
                       {"conversion", Pnorm * Omega_ci},
@@ -109,18 +121,20 @@ private:
 namespace {
 /// Register three components, one for each hydrogen isotope
 /// so no isotope dependence included.
-RegisterComponent<AmjuelHydIonisationIsotope<'h'>>
+RegisterComponent<AmjuelHydIonisationIsotope<'h', '.'>>
     registerionisation_h("h + e -> h+ + 2e");
-RegisterComponent<AmjuelHydIonisationIsotope<'d'>>
+RegisterComponent<AmjuelHydIonisationIsotope<'d', '.'>>
     registerionisation_d("d + e -> d+ + 2e");
-RegisterComponent<AmjuelHydIonisationIsotope<'t'>>
+RegisterComponent<AmjuelHydIonisationIsotope<'t', '.'>>
     registerionisation_t("t + e -> t+ + 2e");
-RegisterComponent<AmjuelHydIonisationIsotope<'h*'>>
-    registerionisation_h("h* + e -> h+ + 2e");
-RegisterComponent<AmjuelHydIonisationIsotope<'d*'>>
-    registerionisation_d("d* + e -> d+ + 2e");
-RegisterComponent<AmjuelHydIonisationIsotope<'t*'>>
-    registerionisation_t("t* + e -> t+ + 2e");
+
+    
+RegisterComponent<AmjuelHydIonisationIsotope<'h', '*'>>
+    registerionisation_h_hot("h* + e -> h+ + 2e");
+RegisterComponent<AmjuelHydIonisationIsotope<'d', '*'>>
+    registerionisation_d_hot("d* + e -> d+ + 2e");
+RegisterComponent<AmjuelHydIonisationIsotope<'t', '*'>>
+    registerionisation_t_hot("t* + e -> t+ + 2e");
 } // namespace
 
 #endif // AMJUEL_HYD_IONISATION_H
