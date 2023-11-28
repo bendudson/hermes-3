@@ -237,6 +237,8 @@ private:
 namespace {
 /// Register three components, one for each hydrogen isotope
 /// so no isotope dependence included.
+
+/// Regular neutrals
 RegisterComponent<HydrogenChargeExchangeIsotope<'h', 'h'>>
     register_cx_hh("h + h+ -> h+ + h");
 RegisterComponent<HydrogenChargeExchangeIsotope<'d', 'd'>>
@@ -244,6 +246,24 @@ RegisterComponent<HydrogenChargeExchangeIsotope<'d', 'd'>>
 RegisterComponent<HydrogenChargeExchangeIsotope<'t', 't'>>
     register_cx_tt("t + t+ -> t+ + t");
 
+/// Hot neutrals
+RegisterComponent<HydrogenChargeExchangeIsotope<'h', 'h'>>
+    register_cx_hh("h* + h+ -> h+ + h*");
+RegisterComponent<HydrogenChargeExchangeIsotope<'d', 'd'>>
+    register_cx_dd("d* + d+ -> d+ + d*");
+RegisterComponent<HydrogenChargeExchangeIsotope<'t', 't'>>
+    register_cx_tt("t* + t+ -> t+ + t*");
+
+/// Cold -> hot neutrals
+RegisterComponent<HydrogenChargeExchangeIsotope<'h', 'h'>>
+    register_cx_hh("h + h+ -> h+ + h*");
+RegisterComponent<HydrogenChargeExchangeIsotope<'d', 'd'>>
+    register_cx_dd("d + d+ -> d+ + d*");
+RegisterComponent<HydrogenChargeExchangeIsotope<'t', 't'>>
+    register_cx_tt("t + t+ -> t+ + t*");
+
+
+// TODO: Implement hot neutrals for these
 // Charge exchange between different isotopes
 RegisterComponent<HydrogenChargeExchangeIsotope<'h', 'd'>>
     register_cx_hd("h + d+ -> h+ + d");

@@ -115,6 +115,12 @@ RegisterComponent<AmjuelHydIonisationIsotope<'d'>>
     registerionisation_d("d + e -> d+ + 2e");
 RegisterComponent<AmjuelHydIonisationIsotope<'t'>>
     registerionisation_t("t + e -> t+ + 2e");
+RegisterComponent<AmjuelHydIonisationIsotope<'h*'>>
+    registerionisation_h("h* + e -> h+ + 2e");
+RegisterComponent<AmjuelHydIonisationIsotope<'d*'>>
+    registerionisation_d("d* + e -> d+ + 2e");
+RegisterComponent<AmjuelHydIonisationIsotope<'t*'>>
+    registerionisation_t("t* + e -> t+ + 2e");
 } // namespace
 
 #endif // AMJUEL_HYD_IONISATION_H
