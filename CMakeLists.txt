@@ -94,6 +94,7 @@ set(HERMES_SOURCES
     src/solkit_hydrogen_charge_exchange.cxx
     src/upstream_density_feedback.cxx
     src/thermal_force.cxx
+    src/tokamak_core.cxx
     src/ion_viscosity.cxx
     src/transform.cxx
     src/vorticity.cxx
@@ -148,6 +149,7 @@ set(HERMES_SOURCES
     include/sheath_closure.hxx
     include/sound_speed.hxx
     include/thermal_force.hxx
+    include/tokamak_core.hxx
     include/upstream_density_feedback.hxx
     include/vorticity.hxx
     include/zero_current.hxx
