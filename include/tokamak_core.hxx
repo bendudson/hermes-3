@@ -51,6 +51,7 @@ struct TokamakCore : public Component {
     auto Nnorm = get<BoutReal>(state["Nnorm"]);
     auto Tnorm = get<BoutReal>(state["Tnorm"]);
     auto Omega_ci = get<BoutReal>(state["Omega_ci"]);
+    auto rho_s0 = get<BoutReal>(state["rho_s0"]);
     const BoutReal Pnorm = SI::qe * Tnorm * Nnorm; 
 
     if (diagnose) {
@@ -59,7 +60,7 @@ struct TokamakCore : public Component {
         set_with_attrs(state[std::string("E") + name + std::string("_core_src")], energy_source,
                     {{"time_dimension", "t"},
                       {"units", "W m^-3"},
-                      {"conversion", Pnorm * Omega_ci},
+                      {"conversion", Nnorm * Tnorm * SI::qe / rho_s0**3},
                       {"standard_name", "energy source"},
                       {"long_name", name + " core energy source"},
                       {"species", name},
@@ -67,10 +68,10 @@ struct TokamakCore : public Component {
       }
 
       if (particle_flow > 0) {
-        set_with_attrs(state[std::string("N") + name + std::string("_core_src")], density_source,
+        set_with_attrs(state[std::string("S") + name + std::string("_core_src")], density_source,
                     {{"time_dimension", "t"},
                       {"units", "m^-3 s^-1"},
-                      {"conversion", Nnorm * Omega_ci},
+                      {"conversion", Omega_ci / rho_s0**2},
                       {"standard_name", "density source"},
                       {"long_name", name + " core number density source"},
                       {"species", name},
@@ -88,7 +89,9 @@ private:
   Field3D energy_source;     ///< Core energy source in [W/m^3]
   BoutReal particle_flow;    ///< Core particle inflow in [s^-1]
   Field3D density_source;   ///< Core particle source in [m^-3/s]
-  BoutReal core_volume;      ///< Volume of first core ring in [m^3]
+  BoutReal core_volume_local, core_volume;      ///< Volume of first core ring in [m^3] for one processor, and for whole domain
+
+  Field2D loopmarker; /// Debug only
 
   bool diagnose; ///< Output diagnostic information?
 };
