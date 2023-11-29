@@ -120,12 +120,12 @@ RegisterComponent<AmjuelHydRecombinationIsotope<'d'>>
     register_recombination_d("d+ + e -> d");
 RegisterComponent<AmjuelHydRecombinationIsotope<'t'>>
     register_recombination_t("t+ + e -> t");
-RegisterComponent<AmjuelHydRecombinationIsotope<'h*'>>
-    register_recombination_h("h+ + e -> h*");
-RegisterComponent<AmjuelHydRecombinationIsotope<'d*'>>
-    register_recombination_d("d+ + e -> d*");
-RegisterComponent<AmjuelHydRecombinationIsotope<'t*'>>
-    register_recombination_t("t+ + e -> t*");
+// RegisterComponent<AmjuelHydRecombinationIsotope<'h*'>>
+//     register_recombination_h("h+ + e -> h*");
+// RegisterComponent<AmjuelHydRecombinationIsotope<'d*'>>
+//     register_recombination_d("d+ + e -> d*");
+// RegisterComponent<AmjuelHydRecombinationIsotope<'t*'>>
+//     register_recombination_t("t+ + e -> t*");
 } // namespace
 
 #endif // AMJUEL_HYD_RECOMBINATION_H
