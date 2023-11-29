@@ -112,7 +112,7 @@ protected:
 ///                                + Shd+_cx d/dt(Nh+) = ... - Shd+_cx d/dt(Nd)  = ... -
 ///                                Shd+_cx d/dt(Nd+) = ... + Shd+_cx
 ///
-template <char Isotope1, char Isotope2>
+template <char Isotope1, char Isotope2, char Kind>
 struct HydrogenChargeExchangeIsotope : public HydrogenChargeExchange {
   HydrogenChargeExchangeIsotope(std::string name, Options& alloptions, Solver* solver)
       : HydrogenChargeExchange(name, alloptions, solver) {
@@ -125,28 +125,66 @@ struct HydrogenChargeExchangeIsotope : public HydrogenChargeExchange {
   void transform(Options& state) override {
     Field3D R, atom_mom, ion_mom, atom_energy, ion_energy;
 
-    calculate_rates(state["species"][{Isotope1}],                   // e.g. "h"
-                    state["species"][{Isotope2, '+'}],              // e.g. "d+"
-                    state["species"][{Isotope2}],                   // e.g. "d"
-                    state["species"][{Isotope1, '+'}],              // e.g. "h+"
+    // Prepare species names
+    std::string atom1{Isotope1};
+    std::string ion1{Isotope1, '+'};
+    std::string atom2{Isotope2};
+    std::string ion2{Isotope2, '+'};
+
+    // CX for hot neutral species: add * identifier
+    if (Kind == '*') {
+      atom1 += '*';
+      atom2 += '*';
+
+    // CX for cold -> hot neutrals: add * on product neutral only
+    } else if (Kind == 'x') {
+      atom2 += '*';
+    }
+
+    calculate_rates(state["species"][atom1],             // e.g. "h"
+                    state["species"][ion1],              // e.g. "d+"
+                    state["species"][atom2],             // e.g. "d"
+                    state["species"][ion2],              // e.g. "h+"
                     R, atom_mom, ion_mom, atom_energy, ion_energy); // Transfer channels
 
     if (diagnose) {
       // Calculate diagnostics to be written to dump file
-      if (Isotope1 == Isotope2) {
-        // Simpler case of same isotopes
+      if (Isotope1 == Isotope2) and (atom1 == atom2) {
+        // Simpler case of same isotopes and atoms
         //  - No net particle source/sink
         //  - atoms lose atom_mom, gain ion_mom
         //
         F = ion_mom - atom_mom;       // Momentum transferred to atoms due to CX with ions
         E = ion_energy - atom_energy; // Energy transferred to atoms
-      } else {
+
+      } else if (Isotope1 == Isotope2) and (atom1 != atom2) {
+        // Same isotopes, but hot and cold neutral species
+
+        // Properties are transferred from LHS to RHS of reaction:
+        // atom1 + ion1 -> atom2 + ion2
+        // Energy and momentum flow:
+        // - From atom1 (cold) to ion2
+        // - From ion1 to atom2 (hot)
+
+        S = R;               // Source of hot atoms (CX always source of hot atoms)
+        F = -atom_mom;       // Cold neutrals lose momentum
+        Fhot = -ion_mom;     // Hot neutrals gain LHS ion momentum
+        Fi = -atom_mom;      // RHS ions get cold neutral momentum
+
+        E = -atom_energy;    // Cold neutrals lose energy
+        Ehot = -ion_energy;  // Hot neutrals gain LHS ion energy
+        Ei = -atom_energy;   // RHS ions get cold neutral energy
+
+      } else if (Isotope1 != Isotope2) and (atom1 == atom2) {
         // Different isotopes
         S = -R;           // Source of Isotope1 atoms
         F = -atom_mom;    // Source of momentum for Isotope1 atoms
         F2 = -ion_mom;    // Source of momentum for Isotope2 ions
         E = -atom_energy; // Source of energy for Isotope1 atoms
         E2 = -ion_energy; // Source of energy for Isotope2 ions
+
+      } else if (Isotope1 != Isotope2) and (atom1 != atom2) {
+        throw BoutException("Multigroup neutral model not yet implemented for more than one plasma isotope");
       }
     }
   }
@@ -163,11 +201,23 @@ struct HydrogenChargeExchangeIsotope : public HydrogenChargeExchange {
     if (diagnose) {
       // Save particle, momentum and energy channels
 
+      // Prepare species names
       std::string atom1{Isotope1};
       std::string ion1{Isotope1, '+'};
       std::string atom2{Isotope2};
       std::string ion2{Isotope2, '+'};
 
+      // CX for hot neutral species: add * identifier
+      if (Kind == '*') {
+        atom1 += '*';
+        atom2 += '*';
+
+      // CX for cold -> hot neutrals: add * on product neutral only
+      } else if (Kind == 'x') {
+        atom2 += '*';
+      }
+
+      
       set_with_attrs(state[{'F', Isotope1, Isotope2, '+', '_', 'c', 'x'}], // e.g Fhd+_cx
                      F,
                      {{"time_dimension", "t"},
@@ -239,46 +289,46 @@ namespace {
 /// so no isotope dependence included.
 
 /// Regular neutrals
-RegisterComponent<HydrogenChargeExchangeIsotope<'h', 'h'>>
+RegisterComponent<HydrogenChargeExchangeIsotope<'h', 'h', '.'>>
     register_cx_hh("h + h+ -> h+ + h");
-RegisterComponent<HydrogenChargeExchangeIsotope<'d', 'd'>>
+RegisterComponent<HydrogenChargeExchangeIsotope<'d', 'd', '.'>>
     register_cx_dd("d + d+ -> d+ + d");
-RegisterComponent<HydrogenChargeExchangeIsotope<'t', 't'>>
+RegisterComponent<HydrogenChargeExchangeIsotope<'t', 't', '.'>>
     register_cx_tt("t + t+ -> t+ + t");
 
 /// Hot neutrals
-RegisterComponent<HydrogenChargeExchangeIsotope<'h', 'h'>>
+RegisterComponent<HydrogenChargeExchangeIsotope<'h', 'h', '*'>>
     register_cx_hh("h* + h+ -> h+ + h*");
-RegisterComponent<HydrogenChargeExchangeIsotope<'d', 'd'>>
+RegisterComponent<HydrogenChargeExchangeIsotope<'d', 'd', '*'>>
     register_cx_dd("d* + d+ -> d+ + d*");
-RegisterComponent<HydrogenChargeExchangeIsotope<'t', 't'>>
+RegisterComponent<HydrogenChargeExchangeIsotope<'t', 't', '*'>>
     register_cx_tt("t* + t+ -> t+ + t*");
 
 /// Cold -> hot neutrals
-RegisterComponent<HydrogenChargeExchangeIsotope<'h', 'h'>>
+RegisterComponent<HydrogenChargeExchangeIsotope<'h', 'h', 'x'>>
     register_cx_hh("h + h+ -> h+ + h*");
-RegisterComponent<HydrogenChargeExchangeIsotope<'d', 'd'>>
+RegisterComponent<HydrogenChargeExchangeIsotope<'d', 'd', 'x'>>
     register_cx_dd("d + d+ -> d+ + d*");
-RegisterComponent<HydrogenChargeExchangeIsotope<'t', 't'>>
+RegisterComponent<HydrogenChargeExchangeIsotope<'t', 't', 'x'>>
     register_cx_tt("t + t+ -> t+ + t*");
 
 
 // TODO: Implement hot neutrals for these
 // Charge exchange between different isotopes
-RegisterComponent<HydrogenChargeExchangeIsotope<'h', 'd'>>
-    register_cx_hd("h + d+ -> h+ + d");
-RegisterComponent<HydrogenChargeExchangeIsotope<'d', 'h'>>
-    register_cx_dh("d + h+ -> d+ + h");
+// RegisterComponent<HydrogenChargeExchangeIsotope<'h', 'd'>>
+//     register_cx_hd("h + d+ -> h+ + d");
+// RegisterComponent<HydrogenChargeExchangeIsotope<'d', 'h'>>
+//     register_cx_dh("d + h+ -> d+ + h");
 
-RegisterComponent<HydrogenChargeExchangeIsotope<'h', 't'>>
-    register_cx_ht("h + t+ -> h+ + t");
-RegisterComponent<HydrogenChargeExchangeIsotope<'t', 'h'>>
-    register_cx_th("t + h+ -> t+ + h");
+// RegisterComponent<HydrogenChargeExchangeIsotope<'h', 't'>>
+//     register_cx_ht("h + t+ -> h+ + t");
+// RegisterComponent<HydrogenChargeExchangeIsotope<'t', 'h'>>
+//     register_cx_th("t + h+ -> t+ + h");
 
-RegisterComponent<HydrogenChargeExchangeIsotope<'d', 't'>>
-    register_cx_dt("d + t+ -> d+ + t");
-RegisterComponent<HydrogenChargeExchangeIsotope<'t', 'd'>>
-    register_cx_td("t + d+ -> t+ + d");
+// RegisterComponent<HydrogenChargeExchangeIsotope<'d', 't'>>
+//     register_cx_dt("d + t+ -> d+ + t");
+// RegisterComponent<HydrogenChargeExchangeIsotope<'t', 'd'>>
+//     register_cx_td("t + d+ -> t+ + d");
 } // namespace
 
 #endif // HYDROGEN_CHARGE_EXCHANGE_H
