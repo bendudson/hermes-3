@@ -33,11 +33,8 @@ struct AmjuelHydIonisationIsotope : public AmjuelHydIonisation {
     Options& atom = state["species"][{Isotope}];     // Cold neutral, e.g. "h"
 
     if (Kind == '*') {
-      Options& atom = state["species"][{Isotope, Kind}];     // Hot neutral, e.g. "h*"
+      atom = state["species"][{Isotope, Kind}];     // Hot neutral, e.g. "h*"
     } 
-    // else {
-    //   Options& atom = state["species"][{Isotope}];     // Cold neutral, e.g. "h"
-    // }
     
     Options& ion = state["species"][{Isotope, '+'}]; // e.g. "h+"
     Field3D reaction_rate, momentum_exchange, energy_exchange, energy_loss;
