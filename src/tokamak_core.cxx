@@ -19,21 +19,24 @@ void TokamakCore::transform(Options& state) {
   if ((power > 0) or (particle_flow > 0)) {
 
     core_volume = 0;
+    core_volume_local = 0;
     
-    /// Loop through all core cells and tally up their volume
+    /// Loop through all core cells (excl.guards) and tally up their volume for this processor
     if(mesh->firstX()){   // Only do this for the processor which has the core region
       if (mesh->periodicY(mesh->xstart)) {   // Only do this for the processor with a periodic Y (core)
-        for(int iy=0; iy < mesh->LocalNy ; iy++){
-          for(int iz=0; iz < mesh->LocalNz; iz++){
+        for(int iy=mesh->ystart; iy<=mesh->yend; iy++){
+          for(int iz=mesh->zstart; iz<=mesh->zend; iz++){
 
-            core_volume += J(mesh->xstart, iy) * dx(mesh->xstart, iy)
-                * dy(mesh->xstart, iy) * dz(mesh->xstart, iy);
+            core_volume_local += J(mesh->xstart, iy) * dx(mesh->xstart, iy) * dy(mesh->xstart, iy) * dz(mesh->xstart, iy);
 
           }
         }
       }
     }
 
+    // Sum over all processors 
+    // https://mpitutorial.com/tutorials/mpi-reduce-and-allreduce/
+    MPI_Allreduce(&core_volume_local, &core_volume, 1, MPI_DOUBLE, MPI_SUM, BoutComm::get());
 
     /// Calculate the source and assign it to all cells in the core ring
     if(mesh->firstX()){ 
