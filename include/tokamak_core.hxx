@@ -55,23 +55,27 @@ struct TokamakCore : public Component {
 
     if (diagnose) {
 
-      set_with_attrs(state[std::string("E") + name + std::string("_core_src")], energy_source,
-                   {{"time_dimension", "t"},
-                    {"units", "W m^-3"},
-                    {"conversion", Pnorm * Omega_ci},
-                    {"standard_name", "energy source"},
-                    {"long_name", name + " core energy source"},
-                    {"species", name},
-                    {"source", "tokamak_core"}});
+      if (power > 0) {
+        set_with_attrs(state[std::string("E") + name + std::string("_core_src")], energy_source,
+                    {{"time_dimension", "t"},
+                      {"units", "W m^-3"},
+                      {"conversion", Pnorm * Omega_ci},
+                      {"standard_name", "energy source"},
+                      {"long_name", name + " core energy source"},
+                      {"species", name},
+                      {"source", "tokamak_core"}});
+      }
 
-      set_with_attrs(state[std::string("N") + name + std::string("_core_src")], density_source,
-                   {{"time_dimension", "t"},
-                    {"units", "m^-3 s^-1"},
-                    {"conversion", Nnorm * Omega_ci},
-                    {"standard_name", "density source"},
-                    {"long_name", name + " core number density source"},
-                    {"species", name},
-                    {"source", "tokamak_core"}});
+      if (particle_flow > 0) {
+        set_with_attrs(state[std::string("N") + name + std::string("_core_src")], density_source,
+                    {{"time_dimension", "t"},
+                      {"units", "m^-3 s^-1"},
+                      {"conversion", Nnorm * Omega_ci},
+                      {"standard_name", "density source"},
+                      {"long_name", name + " core number density source"},
+                      {"species", name},
+                      {"source", "tokamak_core"}});
+      }
 
     }
   }
