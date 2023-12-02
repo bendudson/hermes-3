@@ -17,17 +17,29 @@ struct TokamakCore : public Component {
     const BoutReal Nnorm = get<BoutReal>(units["inv_meters_cubed"]);
     const BoutReal Tnorm = get<BoutReal>(units["eV"]);
     const BoutReal Omega_ci = 1. / units["seconds"].as<BoutReal>();
-
+    const BoutReal rho_s0 = get<BoutReal>(units["meters"]);
+    
+    /// NOTE ON NORMALISATION AND UNITS - Mike Kryjak 20/11/2023
+    // Density normalisation is technically in particles per m3 and not 1/m3, which is why rho_s0**3 != 1/Nnorm
+    // Taking the example of the core particle source, we want it to be normalised to 1/(Nnorm*Omega_ci).
+    // However, the volume has been normalised to rho_s0**3, so it must be taken out:
+    // S_norm = S_si / (Nnorm * Omega_ci)
+    // S_norm = flow_norm / volume_norm
+    // -> S_si / (Nnorm * Omega_ci) = flow_norm * (rho_s0**3 / volume_si)
+    // -> flow_si = flow_norm * rho_s0**3 * Nnorm * Omega_ci
+    // 
+    // As per the above, there must be a rho_s0**3 * Nnorm somewhere in the calculation. However, nowhere else in the code
+    // applies this correction to the volume. To stay in line with this, I am applying it to the flow inputs instead.
 
     Options& options = alloptions[name];
 
     power = options["core_power"]
                                .doc("Inflow of energy in the core [W]. -1 = off")
-                               .withDefault<BoutReal>(-1.0) / (SI::qe * Tnorm * Omega_ci);
+                               .withDefault<BoutReal>(-1.0) / (SI::qe * Tnorm * Omega_ci * Nnorm * rho_s0*rho_s0*rho_s0);
 
     particle_flow = options["core_particle_flow"]
                                .doc("Inflow of particles in the core [s^-1]. -1 = off")
-                               .withDefault<BoutReal>(-1.0) / (Omega_ci);
+                               .withDefault<BoutReal>(-1.0) / (Omega_ci * Nnorm * rho_s0*rho_s0*rho_s0);
 
     diagnose = options["diagnose"]
                    .doc("Output additional diagnostics?")
@@ -60,7 +72,7 @@ struct TokamakCore : public Component {
         set_with_attrs(state[std::string("E") + name + std::string("_core_src")], energy_source,
                     {{"time_dimension", "t"},
                       {"units", "W m^-3"},
-                      {"conversion", Nnorm * Tnorm * SI::qe / (rho_s0*rho_s0*rho_s0)},
+                      {"conversion", Nnorm * Tnorm * SI::qe * Omega_ci},
                       {"standard_name", "energy source"},
                       {"long_name", name + " core energy source"},
                       {"species", name},
@@ -71,7 +83,7 @@ struct TokamakCore : public Component {
         set_with_attrs(state[std::string("S") + name + std::string("_core_src")], density_source,
                     {{"time_dimension", "t"},
                       {"units", "m^-3 s^-1"},
-                      {"conversion", Omega_ci / (rho_s0*rho_s0*rho_s0)},
+                      {"conversion", Nnorm * Omega_ci},
                       {"standard_name", "density source"},
                       {"long_name", name + " core number density source"},
                       {"species", name},
