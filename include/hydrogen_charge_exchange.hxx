@@ -214,11 +214,11 @@ struct HydrogenChargeExchangeIsotope : public HydrogenChargeExchange {
 
       // CX for cold -> hot neutrals: add * on product neutral only
       } else if (Kind == 'x') {
-        atom2 += '*';
-      }
+        atom2 += '*';}
 
-      
-      set_with_attrs(state[{'F', Isotope1, Isotope2, '+', '_', 'c', 'x'}], // e.g Fhd+_cx
+      // Diagnostics for CX transfer reactions (cxt)
+      if (Kind == '*') { 
+      set_with_attrs(state[std::string("F") + atom1 + ion2 + std::string("_cxt")], 
                      F,
                      {{"time_dimension", "t"},
                       {"units", "kg m^-2 s^-2"},
@@ -228,7 +228,7 @@ struct HydrogenChargeExchangeIsotope : public HydrogenChargeExchange {
                                      + " from " + ion1 + " due to CX with " + ion2)},
                       {"source", "hydrogen_charge_exchange"}});
 
-      set_with_attrs(state[{'E', Isotope1, Isotope2, '+', '_', 'c', 'x'}], // e.g Edt+_cx
+      set_with_attrs(state[std::string("E") + atom1 + ion2 + std::string("_cxt")], 
                      E,
                      {{"time_dimension", "t"},
                       {"units", "W / m^3"},
@@ -237,6 +237,41 @@ struct HydrogenChargeExchangeIsotope : public HydrogenChargeExchange {
                       {"long_name", (std::string("Energy transfer to ") + atom1 + " from "
                                      + ion1 + " due to CX with " + ion2)},
                       {"source", "hydrogen_charge_exchange"}});
+
+      set_with_attrs(
+                      state[std::string("E") + atom1 + ion2 + std::string("_cxt")], // e.g Shd+_cx
+                      S,
+                      {{"time_dimension", "t"},
+                      {"units", "m^-3 s^-1"},
+                      {"conversion", Nnorm * Omega_ci},
+                      {"standard_name", "particle transfer"},
+                      {"long_name", (std::string("Particle transfer to ") + atom1 + " from " + ion1
+                                      + " due to charge exchange with " + ion2)},
+                      {"source", "hydrogen_charge_exchange"}});
+
+      } else {
+        
+        set_with_attrs(state[std::string("F") + atom1 + ion2 + std::string("_cx")], // e.g Fhd+_cx
+                     F,
+                     {{"time_dimension", "t"},
+                      {"units", "kg m^-2 s^-2"},
+                      {"conversion", SI::Mp * Nnorm * Cs0 * Omega_ci},
+                      {"standard_name", "momentum transfer"},
+                      {"long_name", (std::string("Momentum transfer to ") + atom1
+                                     + " from " + ion1 + " due to CX with " + ion2)},
+                      {"source", "hydrogen_charge_exchange"}});
+
+        set_with_attrs(state[std::string("E") + atom1 + ion2 + std::string("_cx")], // e.g Edt+_cx
+                      E,
+                      {{"time_dimension", "t"},
+                        {"units", "W / m^3"},
+                        {"conversion", Pnorm * Omega_ci},
+                        {"standard_name", "energy transfer"},
+                        {"long_name", (std::string("Energy transfer to ") + atom1 + " from "
+                                      + ion1 + " due to CX with " + ion2)},
+                        {"source", "hydrogen_charge_exchange"}});
+
+      }
 
       if (Isotope1 != Isotope2) {
         // Different isotope => particle source, second momentum & energy channel
