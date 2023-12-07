@@ -47,6 +47,9 @@ struct NeutralBoundary : public Component {
 
 private:
   std::string name; ///< Short name of species e.g "d"
+  bool two_group_mode; ///> Account for hot->cold neutral transfer?
+  bool is_hot_atom; ///> Is current neutral a hot atom?
+  std::string hot_atom, cold_atom; ///> Name of the corresponding hot neutral species
 
   BoutReal Tnorm; // Temperature normalisation [eV]
 
@@ -54,8 +57,12 @@ private:
   BoutReal target_fast_refl_fraction, sol_fast_refl_fraction, pfr_fast_refl_fraction; ///< Fraction of neutrals undergoing fast reflection
 
   Field3D target_energy_source, wall_energy_source; ///< Diagnostic for power loss
+  Field3D target_cold_energy_source, target_cold_density_source; ///< Diagnostic for power and particle sources to cold atoms from hot atoms (two-group model)
+  Field3D wall_cold_energy_source, wall_cold_density_source; ///< Diagnostic for power and particle sources to cold atoms from hot atoms (two-group model)
 
   bool diagnose; ///> Save diagnostic variables?
+  bool is_hot_neutral; ///> Is the current species a hot neutral (i.e. with * in name)?
+  
 
   bool lower_y; ///< Boundary condition at lower y?
   bool upper_y; ///< Boundary condition at upper y?
