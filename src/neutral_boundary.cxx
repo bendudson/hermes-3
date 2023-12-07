@@ -205,7 +205,7 @@ void NeutralBoundary::transform(Options& state) {
 
         
 
-        if (is_hot_atom) {
+        if ((is_hot_atom) and (two_group_mode)) {
           ///////////////////////////////////
           // Calculate heat and particle fluxes for the hot->cold neutrals transfer channel
           // When hot neutrals hit the wall and undergo reflection, they turn into
@@ -309,7 +309,7 @@ void NeutralBoundary::transform(Options& state) {
 
 
 
-        if (is_hot_atom) {
+        if ((is_hot_atom) and (two_group_mode)) {
           ///////////////////////////////////
           // Calculate heat and particle fluxes for the hot->cold neutrals transfer channel
           // When hot neutrals hit the wall and undergo reflection, they turn into
@@ -394,15 +394,54 @@ void NeutralBoundary::transform(Options& state) {
 
           BoutReal da = dpol * dtor;  // [m^2]
 
+          // Final grid cell volume:
+          BoutReal dv = coord->J[i] * coord->dx[i] * coord->dy[i] * coord->dz[i];
+
           // Multiply by area to get energy flow (power)
           BoutReal flow = q * da;  // [W]
 
           // Divide by cell volume to get source [W/m^3]
           BoutReal cooling_source = flow / (coord->J[i] * coord->dx[i] * coord->dy[i] * coord->dz[i]);   // [W m^-3]
 
+          if ((is_hot_atom) and (two_group_mode)) {
+          ///////////////////////////////////
+          // Calculate heat and particle fluxes for the hot->cold neutrals transfer channel
+          // When hot neutrals hit the wall and undergo reflection, they turn into
+          // cold neutrals. This helps to keep keep cold neutral population high at the walls.
+          // This means we need to transfer both heat and particles from hot to cold neutrals.
+          //  - Hot neutrals get sources that take all their incident particle and heat away
+          //  - Cold neutrals get sources equivalent to all of that hot incident particle/heat flux
+          //  - "density_source" or "heat_source" is always the CURRENT source, so in this if statement
+          //    this corresponds to the hot neutral - this is why we have a separate cold source.
+
+          //// Particle sources
+
+          // From 1D particle flux of static Maxwellian (Stangeby p.67 eqn.2.24)
+          BoutReal hot_atom_particle_flow = 0.25 * v_th * nnsheath * da;   // [s^-1]  
+          density_source[i] -= hot_atom_particle_flow / dv;             // [m^-3 s^-1] hot atoms lose their incident flow
+          cold_atom_density_source[i] += hot_atom_particle_flow / dv;   // [m^-3 s^-1] cold atoms gain the entire hot atom incident flow
+
+          //// Heat sources
+          const BoutReal nnsheath_cold = 0.5 * (Nn_cold[ig] + Nn_cold[i]);
+          const BoutReal tnsheath_cold = 0.5 * (Tn_cold[ig] + Tn_cold[i]);
+
+          // Get incident hot atom heat flow
+          BoutReal q_incident = 2 * nnsheath * tnsheath * v_th * da;  // [W]
+
+          energy_source[i] -= q_incident / dv;            // [W m^-3]  hot atoms lose their entire incident heat
+          cold_atom_energy_source[i] += q_incident / dv;  // [W m^-3]  Cold atoms get the hot ions' entire incident heat
+          cold_atom_energy_source[i] -= cooling_source;   // [W m^-3]  Cold atoms receive the cooling that the hot atoms would have received
+          
+          // Diagnostics
+          wall_cold_density_source[i] += hot_atom_particle_flow / dv;
+          wall_cold_energy_source[i] += q_incident / dv - cooling_source;
+        
+        } else {
           // Subtract from cell next to boundary
           energy_source[i] -= cooling_source;
           wall_energy_source[i] -= cooling_source;
+
+        }
 
         }
       }
