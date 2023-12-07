@@ -73,12 +73,12 @@ NeutralBoundary::NeutralBoundary(std::string name, Options& alloptions, Solver* 
   //   two_group_mode = false;
   // }
 
-  output<<std::string("\n\n****************************************************\n");
-  output << std::string("Neutral boundary from ") << name;
-  output << std::string("\nCold atom: ") << cold_atom;
-  output << std::string("\nHot atom: ") << hot_atom;
-  output << std::string("\nTwo group mode: ") << two_group_mode;
-  output<<std::string("\n****************************************************\n\n");
+  // output<<std::string("\n\n****************************************************\n");
+  // output << std::string("Neutral boundary from ") << name;
+  // output << std::string("\nCold atom: ") << cold_atom;
+  // output << std::string("\nHot atom: ") << hot_atom;
+  // output << std::string("\nTwo group mode: ") << two_group_mode;
+  // output<<std::string("\n****************************************************\n\n");
 
   
 
@@ -532,6 +532,8 @@ void NeutralBoundary::outputVars(Options& state) {
 
   if (diagnose) {
 
+    
+
     AUTO_TRACE();
 
     // Save particle and energy source for the species created during recycling
@@ -546,6 +548,26 @@ void NeutralBoundary::outputVars(Options& state) {
                       {"standard_name", "energy source"},
                       {"long_name", std::string("Wall reflection energy source of ") + name},
                       {"source", "neutral_boundary"}});
+
+      if ((two_group_mode) and (is_hot_atom)) {
+
+        set_with_attrs(state[{std::string("E") + cold_atom + hot_atom + std::string("_wall_refl")}], wall_cold_energy_source,
+                      {{"time_dimension", "t"},
+                      {"units", "W m^-3"},
+                      {"conversion", Pnorm * Omega_ci},
+                      {"standard_name", "energy source"},
+                      {"long_name", std::string("Energy source due to wall reflection and transfer from") + hot_atom + std::string(" to ") + cold_atom},
+                      {"source", "neutral_boundary"}});
+
+        set_with_attrs(state[{std::string("S") + cold_atom + hot_atom + std::string("_wall_refl")}], wall_cold_density_source,
+                      {{"time_dimension", "t"},
+                      {"units", "s^-1 m^-3"},
+                      {"conversion", Nnorm * Omega_ci},
+                      {"standard_name", "density source"},
+                      {"long_name", std::string("Density source due to wall reflection and transfer from") + hot_atom + std::string(" to ") + cold_atom},
+                      {"source", "neutral_boundary"}});
+
+      }
     }
 
     if ((lower_y) or (upper_y)) {
@@ -556,26 +578,26 @@ void NeutralBoundary::outputVars(Options& state) {
                       {"standard_name", "energy source"},
                       {"long_name", std::string("Wall reflection energy source of ") + name},
                       {"source", "neutral_boundary"}});
-    }
 
-    if ((two_group_mode) and (is_hot_atom)) {
+      if ((two_group_mode) and (is_hot_atom)) {
 
-      set_with_attrs(state[{std::string("E") + cold_atom + hot_atom + std::string("_refl")}], target_cold_energy_source,
-                    {{"time_dimension", "t"},
-                    {"units", "W m^-3"},
-                    {"conversion", Pnorm * Omega_ci},
-                    {"standard_name", "energy source"},
-                    {"long_name", std::string("Energy source due to wall reflection and transfer from") + hot_atom + std::string(" to ") + cold_atom},
-                    {"source", "neutral_boundary"}});
+        set_with_attrs(state[{std::string("E") + cold_atom + hot_atom + std::string("_target_refl")}], target_cold_energy_source,
+                      {{"time_dimension", "t"},
+                      {"units", "W m^-3"},
+                      {"conversion", Pnorm * Omega_ci},
+                      {"standard_name", "energy source"},
+                      {"long_name", std::string("Energy source due to target reflection and transfer from") + hot_atom + std::string(" to ") + cold_atom},
+                      {"source", "neutral_boundary"}});
 
-      set_with_attrs(state[{std::string("S") + cold_atom + hot_atom + std::string("_refl")}], target_cold_density_source,
-                    {{"time_dimension", "t"},
-                    {"units", "s^-1 m^-3"},
-                    {"conversion", Nnorm * Omega_ci},
-                    {"standard_name", "density source"},
-                    {"long_name", std::string("Density source due to wall reflection and transfer from") + hot_atom + std::string(" to ") + cold_atom},
-                    {"source", "neutral_boundary"}});
+        set_with_attrs(state[{std::string("S") + cold_atom + hot_atom + std::string("_target_refl")}], target_cold_density_source,
+                      {{"time_dimension", "t"},
+                      {"units", "s^-1 m^-3"},
+                      {"conversion", Nnorm * Omega_ci},
+                      {"standard_name", "density source"},
+                      {"long_name", std::string("Density source due to target reflection and transfer from") + hot_atom + std::string(" to ") + cold_atom},
+                      {"source", "neutral_boundary"}});
 
+      }
     }
 
   }
