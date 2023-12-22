@@ -216,12 +216,14 @@ void NeutralBoundary::transform(Options& state) {
           //  - "density_source" or "heat_source" is always the CURRENT source, so in this if statement
           //    this corresponds to the hot neutral - this is why we have a separate cold source.
 
-          //// Particle sources
+          // Weight hot -> cold particle and energy transfer to zero as Thot/Tcold tends to 1
+          BoutReal weight = 1 / (1 + std::exp(-100 * (Tn[i] / Tn_cold[i] - 1.06)));
 
+          //// Particle sources
           // From 1D particle flux of static Maxwellian (Stangeby p.67 eqn.2.24)
           BoutReal hot_atom_particle_flow = v_th * nnsheath * da;   // [s^-1]  
-          density_source[i] -= hot_atom_particle_flow / dv;             // [m^-3 s^-1] hot atoms lose their incident flow
-          cold_atom_density_source[i] += hot_atom_particle_flow / dv;   // [m^-3 s^-1] cold atoms gain the entire hot atom incident flow
+          density_source[i] -= hot_atom_particle_flow*weight / dv;             // [m^-3 s^-1] hot atoms lose their incident flow
+          cold_atom_density_source[i] += hot_atom_particle_flow*weight / dv;   // [m^-3 s^-1] cold atoms gain the entire hot atom incident flow
 
           //// Heat sources
 
@@ -235,13 +237,13 @@ void NeutralBoundary::transform(Options& state) {
           // Get incident hot atom heat flow
           BoutReal q_incident = 2 * nnsheath * tnsheath * v_th * da;  // [W]
 
-          energy_source[i] -= q_incident / dv;            // [W m^-3]  hot atoms lose their entire incident heat
-          cold_atom_energy_source[i] += q_incident / dv;  // [W m^-3]  Cold atoms get the hot ions' entire incident heat
-          cold_atom_energy_source[i] -= cooling_source;   // [W m^-3]  Cold atoms receive the cooling that the hot atoms would have received
+          energy_source[i] -= q_incident*weight / dv;            // [W m^-3]  hot atoms lose their entire incident heat
+          cold_atom_energy_source[i] += q_incident*weight / dv;  // [W m^-3]  Cold atoms get the hot ions' entire incident heat
+          cold_atom_energy_source[i] -= cooling_source*weight;   // [W m^-3]  Cold atoms receive the cooling that the hot atoms would have received
           
           // Diagnostics
-          target_cold_density_source[i] += hot_atom_particle_flow / dv;
-          target_cold_energy_source[i] += q_incident / dv - cooling_source;
+          target_cold_density_source[i] += hot_atom_particle_flow*weight / dv;
+          target_cold_energy_source[i] += (q_incident / dv - cooling_source)*weight;
         
         } else {
           // Subtract from cell next to boundary
@@ -320,12 +322,14 @@ void NeutralBoundary::transform(Options& state) {
           //  - "density_source" or "heat_source" is always the CURRENT source, so in this if statement
           //    this corresponds to the hot neutral - this is why we have a separate cold source.
 
-          //// Particle sources
+          // Weight hot -> cold particle and energy transfer to zero as Thot/Tcold tends to 1
+          BoutReal weight = 1 / (1 + std::exp(-100 * (Tn[i] / Tn_cold[i] - 1.06)));
 
+          //// Particle sources
           // From 1D particle flux of static Maxwellian (Stangeby p.67 eqn.2.24)
           BoutReal hot_atom_particle_flow = v_th * nnsheath * da;   // [s^-1]  
-          density_source[i] -= hot_atom_particle_flow / dv;             // [m^-3 s^-1] hot atoms lose their incident flow
-          cold_atom_density_source[i] += hot_atom_particle_flow / dv;   // [m^-3 s^-1] cold atoms gain the entire hot atom incident flow
+          density_source[i] -= hot_atom_particle_flow*weight / dv;             // [m^-3 s^-1] hot atoms lose their incident flow
+          cold_atom_density_source[i] += hot_atom_particle_flow*weight / dv;   // [m^-3 s^-1] cold atoms gain the entire hot atom incident flow
 
           //// Heat sources
 
@@ -339,13 +343,13 @@ void NeutralBoundary::transform(Options& state) {
           // Get incident hot atom heat flow
           BoutReal q_incident = 2 * nnsheath * tnsheath * v_th * da;  // [W]
 
-          energy_source[i] -= q_incident / dv;            // [W m^-3]  hot atoms lose their entire incident heat
-          cold_atom_energy_source[i] += q_incident / dv;  // [W m^-3]  Cold atoms get the hot ions' entire incident heat
-          cold_atom_energy_source[i] -= cooling_source;   // [W m^-3]  Cold atoms receive the cooling that the hot atoms would have received
+          energy_source[i] -= q_incident*weight / dv;            // [W m^-3]  hot atoms lose their entire incident heat
+          cold_atom_energy_source[i] += q_incident*weight / dv;  // [W m^-3]  Cold atoms get the hot ions' entire incident heat
+          cold_atom_energy_source[i] -= cooling_source*weight;   // [W m^-3]  Cold atoms receive the cooling that the hot atoms would have received
           
           // Diagnostics
-          target_cold_density_source[i] += hot_atom_particle_flow / dv;
-          target_cold_energy_source[i] += q_incident / dv - cooling_source;
+          target_cold_density_source[i] += hot_atom_particle_flow*weight / dv;
+          target_cold_energy_source[i] += (q_incident / dv - cooling_source)*weight;
         
         } else {
           // Subtract from cell next to boundary
@@ -414,12 +418,14 @@ void NeutralBoundary::transform(Options& state) {
           //  - "density_source" or "heat_source" is always the CURRENT source, so in this if statement
           //    this corresponds to the hot neutral - this is why we have a separate cold source.
 
-          //// Particle sources
+          // Weight hot -> cold particle and energy transfer to zero as Thot/Tcold tends to 1
+          BoutReal weight = 1 / (1 + std::exp(-100 * (Tn[i] / Tn_cold[i] - 1.06)));
 
+          //// Particle sources
           // From 1D particle flux of static Maxwellian (Stangeby p.67 eqn.2.24)
           BoutReal hot_atom_particle_flow = v_th * nnsheath * da;   // [s^-1]  
-          density_source[i] -= hot_atom_particle_flow / dv;             // [m^-3 s^-1] hot atoms lose their incident flow
-          cold_atom_density_source[i] += hot_atom_particle_flow / dv;   // [m^-3 s^-1] cold atoms gain the entire hot atom incident flow
+          density_source[i] -= hot_atom_particle_flow*weight / dv;             // [m^-3 s^-1] hot atoms lose their incident flow
+          cold_atom_density_source[i] += hot_atom_particle_flow*weight / dv;   // [m^-3 s^-1] cold atoms gain the entire hot atom incident flow
 
           //// Heat sources
           const BoutReal nnsheath_cold = 0.5 * (Nn_cold[ig] + Nn_cold[i]);
@@ -428,13 +434,13 @@ void NeutralBoundary::transform(Options& state) {
           // Get incident hot atom heat flow
           BoutReal q_incident = 2 * nnsheath * tnsheath * v_th * da;  // [W]
 
-          energy_source[i] -= q_incident / dv;            // [W m^-3]  hot atoms lose their entire incident heat
-          cold_atom_energy_source[i] += q_incident / dv;  // [W m^-3]  Cold atoms get the hot ions' entire incident heat
-          cold_atom_energy_source[i] -= cooling_source;   // [W m^-3]  Cold atoms receive the cooling that the hot atoms would have received
+          energy_source[i] -= q_incident*weight / dv;            // [W m^-3]  hot atoms lose their entire incident heat
+          cold_atom_energy_source[i] += q_incident*weight / dv;  // [W m^-3]  Cold atoms get the hot ions' entire incident heat
+          cold_atom_energy_source[i] -= cooling_source*weight;   // [W m^-3]  Cold atoms receive the cooling that the hot atoms would have received
           
           // Diagnostics
-          wall_cold_density_source[i] += hot_atom_particle_flow / dv;
-          wall_cold_energy_source[i] += q_incident / dv - cooling_source;
+          wall_cold_density_source[i] += hot_atom_particle_flow*weight / dv;
+          wall_cold_energy_source[i] += (q_incident / dv - cooling_source)*weight;
         
         } else {
           // Subtract from cell next to boundary
@@ -504,12 +510,14 @@ void NeutralBoundary::transform(Options& state) {
           //  - "density_source" or "heat_source" is always the CURRENT source, so in this if statement
           //    this corresponds to the hot neutral - this is why we have a separate cold source.
 
-          //// Particle sources
+          // Weight hot -> cold particle and energy transfer to zero as Thot/Tcold tends to 1
+          BoutReal weight = 1 / (1 + std::exp(-100 * (Tn[i] / Tn_cold[i] - 1.06)));
 
+          //// Particle sources
           // From 1D particle flux of static Maxwellian (Stangeby p.67 eqn.2.24)
           BoutReal hot_atom_particle_flow = v_th * nnsheath * da;   // [s^-1]  
-          density_source[i] -= hot_atom_particle_flow / dv;             // [m^-3 s^-1] hot atoms lose their incident flow
-          cold_atom_density_source[i] += hot_atom_particle_flow / dv;   // [m^-3 s^-1] cold atoms gain the entire hot atom incident flow
+          density_source[i] -= hot_atom_particle_flow*weight / dv;             // [m^-3 s^-1] hot atoms lose their incident flow
+          cold_atom_density_source[i] += hot_atom_particle_flow*weight / dv;   // [m^-3 s^-1] cold atoms gain the entire hot atom incident flow
 
           //// Heat sources
           const BoutReal nnsheath_cold = 0.5 * (Nn_cold[ig] + Nn_cold[i]);
@@ -518,13 +526,13 @@ void NeutralBoundary::transform(Options& state) {
           // Get incident hot atom heat flow
           BoutReal q_incident = 2 * nnsheath * tnsheath * v_th * da;  // [W]
 
-          energy_source[i] -= q_incident / dv;            // [W m^-3]  hot atoms lose their entire incident heat
-          cold_atom_energy_source[i] += q_incident / dv;  // [W m^-3]  Cold atoms get the hot ions' entire incident heat
-          cold_atom_energy_source[i] -= cooling_source;   // [W m^-3]  Cold atoms receive the cooling that the hot atoms would have received
+          energy_source[i] -= q_incident*weight / dv;            // [W m^-3]  hot atoms lose their entire incident heat
+          cold_atom_energy_source[i] += q_incident*weight/ dv;  // [W m^-3]  Cold atoms get the hot ions' entire incident heat
+          cold_atom_energy_source[i] -= cooling_source*weight;   // [W m^-3]  Cold atoms receive the cooling that the hot atoms would have received
           
           // Diagnostics
-          wall_cold_density_source[i] += hot_atom_particle_flow / dv;
-          wall_cold_energy_source[i] += q_incident / dv - cooling_source;
+          wall_cold_density_source[i] += hot_atom_particle_flow*weight / dv;
+          wall_cold_energy_source[i] += (q_incident / dv - cooling_source)*weight;
         
         } else {
           // Subtract from cell next to boundary
