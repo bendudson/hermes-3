@@ -43,7 +43,11 @@ void HydrogenChargeExchange::calculate_rates(Options& atom1, Options& ion1,
   // Optionally multiply by arbitrary multiplier
   const Field3D sigmav = exp(ln_sigmav) * (1e-6 * Nnorm / FreqNorm) * rate_multiplier;
 
-  const Field3D Natom = floor(get<Field3D>(atom1["density"]), 1e-5);
+  // The floor was to provide some minimum CX in low dens regions to prevent division by almost 0.
+  // This is now removed because it causes the reaction to never stop - this is a problem if there are 
+  // density sources in the reaction. 
+  // const Field3D Natom = floor(get<Field3D>(atom1["density"]), 1e-5);   
+  const Field3D Natom = get<Field3D>(atom1["density"]);
   const Field3D Nion = floor(get<Field3D>(ion1["density"]), 1e-5);
 
   R = Natom * Nion * sigmav; // Rate coefficient. This is an output parameter.
