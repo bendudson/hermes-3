@@ -66,23 +66,6 @@ void TemperatureFeedback::transform(Options& state) {
   }
   ASSERT2(std::isfinite(source_multiplier));
 
-  // std::list<std::string>::iterator species_it = species_list.begin();
-  // std::list<std::string>::iterator scaling_factor_it = scaling_factors_list.begin();
-
-  // while (species_it != species_list.end() && scaling_factor_it != scaling_factors_list.end()) {
-
-  //     std::string sourced_species = trim(*species_it, " \t\r()"); // The species name in the list
-  //     BoutReal scaling_factor = stringToReal(trim(*scaling_factor_it, " \t\r()"));
-
-  //     if (sourced_species.empty())
-  //       continue; // Missing
-      
-  //     add(state["species"][sourced_species]["energy_source"], scaling_factor * source_multiplier * source_shape);
-
-  //     ++species_it;
-  //     ++scaling_factor_it;
-  // }
-
   auto species_it = species_list.begin();
   auto scaling_factor_it = scaling_factors_list.begin();
 
@@ -102,8 +85,4 @@ void TemperatureFeedback::transform(Options& state) {
       ++species_it;
       ++scaling_factor_it;
   }
-
-  // Scale the source and add to the species temperature source
-  // add(species["energy_source"], source_multiplier * source_shape);
-  // add(state["species"]["d+"]["energy_source"], source_multiplier * source_shape);
 }
