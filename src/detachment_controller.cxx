@@ -37,13 +37,7 @@ void DetachmentController::transform(Options& state) {
     for (int j = mesh->ystart; j <= detachment_front_index; ++j) {
         detachment_front_location = detachment_front_location + 0.5 * coord->dy(0, j-1, 0) + 0.5 * coord->dy(0, j, 0);
     }
-
-    if (set_location_relative_to_target) {
-        error = detachment_front_desired_location - (detachment_front_location - connection_length);
-    } else {
-        error = detachment_front_desired_location - detachment_front_location;
-    }
-
+    error = detachment_front_desired_location - detachment_front_location;
 
     // PI controller, using crude integral of the error
     if (error_lasttime < 0.0) {
