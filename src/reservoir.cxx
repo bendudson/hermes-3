@@ -6,12 +6,15 @@
 
 using bout::globals::mesh;
 
-Reservoir::Reservoir(std::string name, Options& alloptions, Solver*) {
+Reservoir::Reservoir(std::string name, Options& alloptions, Solver*) 
+    :name(name){
   AUTO_TRACE();
 
   const Options& units = alloptions["units"];
   const BoutReal Tnorm = units["eV"];
   const BoutReal Nnorm = units["inv_meters_cubed"];
+
+  
 
   // Get the options for this species
   Options& options = alloptions[name];
@@ -23,7 +26,7 @@ Reservoir::Reservoir(std::string name, Options& alloptions, Solver*) {
 
   reservoir_location = options["reservoir_location"]
                   .doc("Indicates reservoir location if >0")
-                  .withDefault(0.0);  
+                  .withDefault<Field3D>(0.0);  
 
   diagnose =
       options["diagnose"].doc("Save additional diagnostics?").withDefault<bool>(false);
@@ -59,8 +62,8 @@ void Reservoir::outputVars(Options& state) {
   if (diagnose) {
 
       set_with_attrs(state[{std::string("reservoir_location_") + name}], reservoir_location,
-                              {{"standard_name", name + "reservoir location"},
-                              {"long_name", name + "reservoir location"},
+                              {{"standard_name", name + std::string("reservoir location")},
+                              {"long_name", name + std::string("reservoir location")},
                               {"source", "reservoir"}}
       );
   };
