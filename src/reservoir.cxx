@@ -4,6 +4,7 @@
 #include <bout/mesh.hxx>
 #include <bout/constants.hxx>
 #include "../include/hermes_utils.hxx"  // For indexAt
+#include <iostream>   // For outputting to log file
 
 using bout::globals::mesh;
 
@@ -55,6 +56,7 @@ void Reservoir::transform(Options& state) {
   // We are operating on only one species
   auto species = state["species"][name];
 
+
   // Get metric tensor components
   Coordinates* coord = mesh->getCoordinates();
   const Field2D& J = coord->J;
@@ -65,15 +67,15 @@ void Reservoir::transform(Options& state) {
   const Field2D dv = dx * dy * dz * J;
 
   // Get state sources - we will then add to them and pass them back to the state so they get added to the RHS
-  state_density_source = species.isSet("density_source")
-                                ? getNonFinal<Field3D>(species["density_source"])
-                                : 0.0;
-  state_energy_source = species.isSet("energy_source")
-                              ? getNonFinal<Field3D>(species["energy_source"])
-                              : 0.0;
-  state_momentum_source = species.isSet("momentum_source")
-                              ? getNonFinal<Field3D>(species["momentum_source"])
-                              : 0.0;
+  // state_density_source = species.isSet("density_source")
+  //                               ? getNonFinal<Field3D>(species["density_source"])
+  //                               : 0.0;
+  // state_energy_source = species.isSet("energy_source")
+  //                             ? getNonFinal<Field3D>(species["energy_source"])
+  //                             : 0.0;
+  // state_momentum_source = species.isSet("momentum_source")
+  //                             ? getNonFinal<Field3D>(species["momentum_source"])
+  //                             : 0.0;
 
   // These are the sources we are computing which we will add to state sources at the end
   density_source = 0;
@@ -84,6 +86,7 @@ void Reservoir::transform(Options& state) {
   Field3D N = get<Field3D>(species["density"]);
   Field3D P = get<Field3D>(species["pressure"]);
   Field3D NV = get<Field3D>(species["momentum"]);
+
 
   for(int ix=0; ix < mesh->LocalNx ; ix++){
       for(int iy=0; iy < mesh->LocalNy ; iy++){
@@ -100,7 +103,10 @@ void Reservoir::transform(Options& state) {
             BoutReal Prate = P[i] / N[i] * Nrate;
             BoutReal NVrate = NV[i] / N[i] * Nrate;
 
+
+
             if (reservoir_location[i] > 0) {
+
               density_source[i] += Nrate;
               energy_source[i] += (3. / 2) * Prate;
               momentum_source[i] += NVrate;
@@ -111,9 +117,56 @@ void Reservoir::transform(Options& state) {
   }
 
   // Put the updated sources back into the state
-  set<Field3D>(species["density_source"], state_density_source + density_source);
-  set<Field3D>(species["energy_source"], state_energy_source + energy_source);
-  set<Field3D>(species["momentum_source"], state_momentum_source + momentum_source);
+  // set<Field3D>(species["density_source"], state_density_source + density_source);
+  // set<Field3D>(species["energy_source"], state_energy_source + energy_source);
+  // set<Field3D>(species["momentum_source"], state_momentum_source + momentum_source);
+
+  // Field3D neutral_density1 = getNoBoundary<Field3D>(species["density"]);
+
+  // for(int ix=0; ix < mesh->LocalNx ; ix++){
+  //     for(int iy=0; iy < mesh->LocalNy ; iy++){
+  //         for(int iz=0; iz < mesh->LocalNz; iz++){
+
+  //           // output << "("" << ix << "Y:" << iy << "Z:" << iz << "T:" << Tn(ix, iy, iz) << "  ";
+  //           std::string string_count = std::string("(") + std::to_string(ix) + std::string(",") + std::to_string(iy)+ std::string(",") + std::to_string(iz) + std::string(")");
+  //           output << string_count + std::string(": ") + std::to_string(neutral_density1(ix,iy,iz)) + std::string("; ");
+  //           output << "\n";
+  //         }
+  //     }
+  //   output << "\n";
+  //   }
+
+  add(species["density_source"], density_source);
+  add(species["energy_source"], energy_source);
+  add(species["momentum_source"], momentum_source);
+
+  // for(int ix=0; ix < mesh->LocalNx ; ix++){
+  //     for(int iy=0; iy < mesh->LocalNy ; iy++){
+  //         for(int iz=0; iz < mesh->LocalNz; iz++){
+
+  //           // output << "("" << ix << "Y:" << iy << "Z:" << iz << "T:" << Tn(ix, iy, iz) << "  ";
+  //           std::string string_count = std::string("(") + std::to_string(ix) + std::string(",") + std::to_string(iy)+ std::string(",") + std::to_string(iz) + std::string(")");
+  //           output << string_count + std::string(": ") + std::to_string(density_source(ix,iy,iz)) + std::string("; ");
+  //           output << "\n";
+  //         }
+  //     }
+  //   output << "\n";
+  //   }
+
+  // Field3D neutral_density2 = getNoBoundary<Field3D>(species["density"]);
+
+  // for(int ix=0; ix < mesh->LocalNx ; ix++){
+  //     for(int iy=0; iy < mesh->LocalNy ; iy++){
+  //         for(int iz=0; iz < mesh->LocalNz; iz++){
+
+  //           // output << "("" << ix << "Y:" << iy << "Z:" << iz << "T:" << Tn(ix, iy, iz) << "  ";
+  //           std::string string_count = std::string("(") + std::to_string(ix) + std::string(",") + std::to_string(iy)+ std::string(",") + std::to_string(iz) + std::string(")");
+  //           output << string_count + std::string(": ") + std::to_string(neutral_density2(ix,iy,iz)) + std::string("; ");
+  //           output << "\n";
+  //         }
+  //     }
+  //   output << "\n";
+  //   }
 
 }
 
@@ -150,7 +203,7 @@ void Reservoir::outputVars(Options& state) {
                               {"long_name", name + std::string(" energy transfer from reservoir")},
                               {"source", "reservoir"}});
 
-      set_with_attrs(state[{std::string("F") + name + std::string("_rsv")}], energy_source,
+      set_with_attrs(state[{std::string("F") + name + std::string("_rsv")}], momentum_source,
                               {{"time_dimension", "t"},
                               {"units", "kg m^-2 s^-2"},
                               {"conversion", SI::Mp * Nnorm * Cs0 * Omega_ci},
