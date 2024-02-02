@@ -16,8 +16,12 @@ private:
 
   std::string name;                ///< Short name of the species e.g. h+
   Field3D reservoir_location;      ///< Indicates reservoir if >0
-  BoutReal reservoir_density;
+  BoutReal reservoir_density, reservoir_timescale;
   bool diagnose;
+
+  Field3D state_density_source, state_energy_source, state_momentum_source;
+  Field3D density_source, energy_source, momentum_source;
+  Field3D N, P, NV;
 
 };
 
