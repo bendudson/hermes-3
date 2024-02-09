@@ -54,7 +54,7 @@ void Reservoir::transform(Options& state) {
   AUTO_TRACE();
 
   // We are operating on only one species
-  auto species = state["species"][name];
+  auto& species = state["species"][name];
 
 
   // Get metric tensor components
