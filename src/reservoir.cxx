@@ -35,6 +35,17 @@ Reservoir::Reservoir(std::string name, Options& alloptions, Solver*) : name(name
 
   diagnose =
       options["diagnose"].doc("Save additional diagnostics?").withDefault<bool>(false);
+
+  // Find every cell that has reservoir_location > 0
+  // so we can efficiently iterate over them later
+  Region<Ind3D>::RegionIndices indices;
+  BOUT_FOR_SERIAL(i, reservoir_location.getRegion("RGN_NOBNDRY")) {
+    if (reservoir_location[i] > 0.0) {
+      // Add this cell to the iteration
+      indices.push_back(i);
+    }
+  }
+  reservoir_region = Region<Ind3D>(indices);
 }
 
 void Reservoir::transform(Options& state) {
@@ -54,22 +65,20 @@ void Reservoir::transform(Options& state) {
   Field3D P = GET_NOBOUNDARY(Field3D, species["pressure"]);
   Field3D NV = GET_NOBOUNDARY(Field3D, species["momentum"]);
 
-  BOUT_FOR(i, N.getRegion("RGN_NOBNDRY")) {
-    if (reservoir_location[i] > 0) {
+  // Iterate over the cells where reservoir_location > 0
+  BOUT_FOR(i, reservoir_region) {
+    // Particle transfer rate proportional to difference in density over timescale
+    BoutReal Nrate = (reservoir_density - N[i]) / reservoir_timescale;
 
-      // Particle transfer rate proportional to difference in density over timescale
-      BoutReal Nrate = (reservoir_density - N[i]) / reservoir_timescale;
+    // Pressure and momentum flows proportional to density
+    // When flow is reversed and these become sources, the new particles have
+    // the same pressure and momentum as the local particles.
+    BoutReal Prate = P[i] / N[i] * Nrate;
+    BoutReal NVrate = NV[i] / N[i] * Nrate;
 
-      // Pressure and momentum flows proportional to density
-      // When flow is reversed and these become sources, the new particles have
-      // the same pressure and momentum as the local particles.
-      BoutReal Prate = P[i] / N[i] * Nrate;
-      BoutReal NVrate = NV[i] / N[i] * Nrate;
-
-      density_source[i] += Nrate;
-      energy_source[i] += (3. / 2) * Prate;
-      momentum_source[i] += NVrate;
-    }
+    density_source[i] += Nrate;
+    energy_source[i] += (3. / 2) * Prate;
+    momentum_source[i] += NVrate;
   }
 
   add(species["density_source"], density_source);

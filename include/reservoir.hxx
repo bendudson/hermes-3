@@ -45,6 +45,9 @@ private:
   BoutReal reservoir_density, reservoir_timescale;
   bool diagnose;
 
+  /// Cell indices where reservoir_location > 0
+  Region<Ind3D> reservoir_region;
+
   Field3D density_source, energy_source, momentum_source;
 };
 
