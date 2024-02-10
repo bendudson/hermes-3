@@ -1,6 +1,7 @@
 
 #include "../include/sheath_boundary_penalty.hxx"
 
+#include <bout/constants.hxx>
 #include <bout/globals.hxx>
 #include <bout/mesh.hxx>
 using bout::globals::mesh;
@@ -55,6 +56,12 @@ void SheathBoundaryPenalty::transform(Options& state) {
   auto Te = getNoBoundary<Field3D>(electrons["temperature"]);
   const BoutReal Me = get<BoutReal>(electrons["AA"]);
 
+  Field3D phi;
+  bool has_phi = IS_SET_NOBOUNDARY(state["fields"]["phi"]);
+  if (has_phi) {
+    phi = getNoBoundary<Field3D>(state["fields"]["phi"]);
+  }
+
   {
     Field3D Pe = electrons.isSet("pressure")
                      ? getNoBoundary<Field3D>(electrons["pressure"])
@@ -90,6 +97,39 @@ void SheathBoundaryPenalty::transform(Options& state) {
                            - mask * Me * nfloor * Ve[i] / penalty_timescale;
       energy_source[i] = (1 - mask) * energy_source[i]
                          - mask * gamma_e * nfloor * Te[i] / penalty_timescale;
+
+      if (has_phi) {
+        // Surface penalty terms, to impose sheath current
+        // The gradient of the mask gives the direction into the wall
+        BoutReal dmask_yup = penalty_mask[i.yp()] - mask;
+        if (std::fabs(dmask_yup) > 1e-5) {
+          const auto iyp = i.yp();
+          const BoutReal tesheath = 0.5 * (Te[i] + Te[iyp]);
+          const BoutReal vesheath = 0.5 * (Ve[i] + Ve[iyp]);
+          const BoutReal phisheath = 0.5 * (phi[i] + phi[iyp]);
+
+          const BoutReal Cse =
+              sqrt(tesheath / (TWOPI * Me)) * exp(-phisheath / BOUTMAX(tesheath, 1e-5));
+
+          momentum_source[i] += mask * std::fabs(dmask_yup) * Me * nfloor
+                                * (SIGN(dmask_yup) * Cse - vesheath) / penalty_timescale;
+        }
+
+        BoutReal dmask_ydown = mask - penalty_mask[i.ym()];
+        if (std::fabs(dmask_ydown) > 1e-5) {
+          const auto iym = i.ym();
+          const BoutReal tesheath = 0.5 * (Te[i] + Te[iym]);
+          const BoutReal vesheath = 0.5 * (Ve[i] + Ve[iym]);
+          const BoutReal phisheath = 0.5 * (phi[i] + phi[iym]);
+
+          const BoutReal Cse =
+              sqrt(tesheath / (TWOPI * Me)) * exp(-phisheath / BOUTMAX(tesheath, 1e-5));
+
+          momentum_source[i] += mask * std::fabs(dmask_ydown) * Me * nfloor
+                                * (SIGN(dmask_ydown) * Cse - vesheath)
+                                / penalty_timescale;
+        }
+      }
     }
 
     set(electrons["density_source"], density_source);
