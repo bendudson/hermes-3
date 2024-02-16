@@ -36,6 +36,10 @@ Reservoir::Reservoir(std::string name, Options& alloptions, Solver*) : name(name
   diagnose =
       options["diagnose"].doc("Save additional diagnostics?").withDefault<bool>(false);
 
+  reservoir_sink_only = 
+    options["reservoir_sink_only"].doc("Set reservoir to only take particles away?").withDefault<bool>(true);
+
+
   // Find every cell that has reservoir_location > 0
   // so we can efficiently iterate over them later
   Region<Ind3D>::RegionIndices indices;
@@ -69,6 +73,12 @@ void Reservoir::transform(Options& state) {
   BOUT_FOR(i, reservoir_region) {
     // Particle transfer rate proportional to difference in density over timescale
     BoutReal Nrate = (reservoir_density - N[i]) / reservoir_timescale;
+
+    if (reservoir_sink_only && Nrate > 0) {
+      // If we only want to remove particles, set the rate to 0
+      Nrate = 0;
+    };
+
 
     // Pressure and momentum flows proportional to density
     // When flow is reversed and these become sources, the new particles have

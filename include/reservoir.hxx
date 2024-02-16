@@ -43,7 +43,7 @@ private:
   std::string name;           ///< Short name of the species e.g. h+
   Field3D reservoir_location; ///< Indicates reservoir if >0
   BoutReal reservoir_density, reservoir_timescale;
-  bool diagnose;
+  bool diagnose, reservoir_sink_only;
 
   /// Cell indices where reservoir_location > 0
   Region<Ind3D> reservoir_region;
