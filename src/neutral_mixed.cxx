@@ -75,6 +75,10 @@ NeutralMixed::NeutralMixed(const std::string& name, Options& alloptions, Solver*
     .doc("Include neutral gas viscosity?")
     .withDefault<bool>(true);
 
+  neutral_conduction = options["neutral_conduction"]
+    .doc("Include neutral gas conduction?")
+    .withDefault<bool>(true);
+
   if (precondition) {
     inv = std::unique_ptr<Laplacian>(Laplacian::create(&options["precon_laplace"]));
 
@@ -385,9 +389,13 @@ void NeutralMixed::finally(const Options& state) {
   ddt(Pn) = -FV::Div_par_mod<hermes::Limiter>(Pn, Vn, sound_speed) // Advection
             - (2. / 3) * Pn * Div_par(Vn)                          // Compression
             + FV::Div_a_Grad_perp(DnnPn, logPnlim) // Perpendicular diffusion
-            + FV::Div_a_Grad_perp(DnnNn, Tn)       // Conduction
-            + FV::Div_par_K_Grad_par(DnnNn, Tn)    // Parallel conduction
-      ;
+            ;
+
+  if (neutral_conduction) {
+    ddt(Pn) += FV::Div_a_Grad_perp(DnnNn, Tn)       // Conduction
+            + FV::Div_par_K_Grad_par(DnnNn, Tn)     // Parallel conduction
+            ;
+  };
 
   Sp = pressure_source;
   if (localstate.isSet("energy_source")) {
