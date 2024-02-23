@@ -51,7 +51,8 @@ private:
   BoutReal flux_limit; ///< Diffusive flux limit
   BoutReal diffusion_limit;    ///< Maximum diffusion coefficient
 
-  bool neutral_viscosity, neutral_conduction; ///< include viscosity, conduction??
+  bool neutral_viscosity, neutral_conduction; ///< include viscosity, conduction?
+  bool upwind_perp_diffusion; ///< Use a more dissipative perpendicular diffusion operator?
   bool evolve_momentum; ///< Evolve parallel momentum?
 
   bool precondition {true}; ///< Enable preconditioner?
