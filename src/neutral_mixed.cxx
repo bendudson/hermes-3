@@ -372,7 +372,7 @@ void NeutralMixed::finally(const Options& state) {
 
     if (upwind_perp_diffusion) {                                      
       ddt(NVn) += FV::Div_a_Grad_perp_limit<PerpLimiter>(DnnNVn,
-                                                 logPnlim) // Perpendicular advection;
+                                                 logPnlim); // Perpendicular advection;
     } else {
       ddt(NVn) += FV::Div_a_Grad_perp(DnnNVn, logPnlim);
     };
