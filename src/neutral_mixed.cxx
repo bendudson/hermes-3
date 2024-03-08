@@ -1,15 +1,19 @@
 
 #include <bout/constants.hxx>
-#include <bout/fv_ops.hxx>
 #include <bout/derivs.hxx>
 #include <bout/difops.hxx>
+#include <bout/fv_ops.hxx>
 #include <bout/output_bout_types.hxx>
 
 #include "../include/div_ops.hxx"
-#include "../include/neutral_mixed.hxx"
 #include "../include/hermes_build_config.hxx"
+#include "../include/neutral_mixed.hxx"
 
 using bout::globals::mesh;
+
+/// The limiter method in the radial pressure-diffusion.
+/// Upwind is consistent with the Y (poloidal) advection.
+using PerpLimiter = FV::Upwind;
 
 NeutralMixed::NeutralMixed(const std::string& name, Options& alloptions, Solver* solver)
     : name(name) {
@@ -31,16 +35,16 @@ NeutralMixed::NeutralMixed(const std::string& name, Options& alloptions, Solver*
   // Evolving variables e.g name is "h" or "h+"
   solver->add(Nn, std::string("N") + name);
   solver->add(Pn, std::string("P") + name);
-  
 
   evolve_momentum = options["evolve_momentum"]
-  .doc("Evolve parallel neutral momentum?")
-  .withDefault<bool>(true);
+                        .doc("Evolve parallel neutral momentum?")
+                        .withDefault<bool>(true);
 
   if (evolve_momentum) {
     solver->add(NVn, std::string("NV") + name);
   } else {
-    output_warn.write("WARNING: Not evolving neutral parallel momentum. NVn and Vn set to zero\n");
+    output_warn.write(
+        "WARNING: Not evolving neutral parallel momentum. NVn and Vn set to zero\n");
     NVn = 0.0;
     Vn = 0.0;
   }
@@ -62,18 +66,19 @@ NeutralMixed::NeutralMixed(const std::string& name, Options& alloptions, Solver*
                      .doc("Enable preconditioning in neutral model?")
                      .withDefault<bool>(true);
 
-  flux_limit = options["flux_limit"]
-    .doc("Limit diffusive fluxes to fraction of thermal speed. <0 means off.")
-    .withDefault(0.2);
+  flux_limit =
+      options["flux_limit"]
+          .doc("Limit diffusive fluxes to fraction of thermal speed. <0 means off.")
+          .withDefault(0.2);
 
   diffusion_limit = options["diffusion_limit"]
-    .doc("Upper limit on diffusion coefficient [m^2/s]. <0 means off")
-    .withDefault(-1.0)
-    / (meters * meters / seconds); // Normalise
+                        .doc("Upper limit on diffusion coefficient [m^2/s]. <0 means off")
+                        .withDefault(-1.0)
+                    / (meters * meters / seconds); // Normalise
 
   neutral_viscosity = options["neutral_viscosity"]
-    .doc("Include neutral gas viscosity?")
-    .withDefault<bool>(true);
+                          .doc("Include neutral gas viscosity?")
+                          .withDefault<bool>(true);
 
   neutral_conduction = options["neutral_conduction"]
     .doc("Include neutral gas conduction?")
@@ -102,10 +107,11 @@ NeutralMixed::NeutralMixed(const std::string& name, Options& alloptions, Solver*
   density_source = 0.0;
   mesh->get(density_source, std::string("N") + name + "_src");
   // Allow the user to override the source
-  density_source = alloptions[std::string("N") + name]["source"]
-               .doc("Source term in ddt(N" + name + std::string("). Units [m^-3/s]"))
-               .withDefault(density_source)
-           / (Nnorm * Omega_ci);
+  density_source =
+      alloptions[std::string("N") + name]["source"]
+          .doc("Source term in ddt(N" + name + std::string("). Units [m^-3/s]"))
+          .withDefault(density_source)
+      / (Nnorm * Omega_ci);
 
   // Try to read the pressure source from the mesh
   // Units of Pascals per second
@@ -113,18 +119,22 @@ NeutralMixed::NeutralMixed(const std::string& name, Options& alloptions, Solver*
   mesh->get(pressure_source, std::string("P") + name + "_src");
   // Allow the user to override the source
   pressure_source = alloptions[std::string("P") + name]["source"]
-               .doc(std::string("Source term in ddt(P") + name
-                    + std::string("). Units [N/m^2/s]"))
-               .withDefault(pressure_source)
-           / (SI::qe * Nnorm * Tnorm * Omega_ci);
+                        .doc(std::string("Source term in ddt(P") + name
+                             + std::string("). Units [N/m^2/s]"))
+                        .withDefault(pressure_source)
+                    / (SI::qe * Nnorm * Tnorm * Omega_ci);
 
   // Set boundary condition defaults: Neumann for all but the diffusivity.
   // The dirichlet on diffusivity ensures no radial flux.
   // NV and V are ignored as they are hardcoded in the parallel BC code.
-  alloptions[std::string("Dnn") + name]["bndry_all"] = alloptions[std::string("Dnn") + name]["bndry_all"].withDefault("dirichlet");
-  alloptions[std::string("T") + name]["bndry_all"] = alloptions[std::string("T") + name]["bndry_all"].withDefault("neumann");
-  alloptions[std::string("P") + name]["bndry_all"] = alloptions[std::string("P") + name]["bndry_all"].withDefault("neumann");
-  alloptions[std::string("N") + name]["bndry_all"] = alloptions[std::string("N") + name]["bndry_all"].withDefault("neumann");
+  alloptions[std::string("Dnn") + name]["bndry_all"] =
+      alloptions[std::string("Dnn") + name]["bndry_all"].withDefault("dirichlet");
+  alloptions[std::string("T") + name]["bndry_all"] =
+      alloptions[std::string("T") + name]["bndry_all"].withDefault("neumann");
+  alloptions[std::string("P") + name]["bndry_all"] =
+      alloptions[std::string("P") + name]["bndry_all"].withDefault("neumann");
+  alloptions[std::string("N") + name]["bndry_all"] =
+      alloptions[std::string("N") + name]["bndry_all"].withDefault("neumann");
 
   // Pick up BCs from input file
   Dnn.setBoundary(std::string("Dnn") + name);
@@ -138,12 +148,12 @@ NeutralMixed::NeutralMixed(const std::string& name, Options& alloptions, Solver*
   logPnlim.setBoundary(std::string("P") + name);
   Nnlim.setBoundary(std::string("N") + name);
 
-  // Product of Dnn and another parameter has same BC as Dnn - see eqns to see why this is necessary
+  // Product of Dnn and another parameter has same BC as Dnn - see eqns to see why this is
+  // necessary
   DnnNn.setBoundary(std::string("Dnn") + name);
   DnnPn.setBoundary(std::string("Dnn") + name);
   DnnTn.setBoundary(std::string("Dnn") + name);
   DnnNVn.setBoundary(std::string("Dnn") + name);
-
 }
 
 void NeutralMixed::transform(Options& state) {
@@ -268,7 +278,8 @@ void NeutralMixed::finally(const Options& state) {
   BoutReal neutral_lmax =
       0.1 / get<BoutReal>(state["units"]["meters"]); // Normalised length
 
-  Field3D Rnn = sqrt(Tn / AA) / neutral_lmax; // Neutral-neutral collisions [normalised frequency]
+  Field3D Rnn =
+      sqrt(Tn / AA) / neutral_lmax; // Neutral-neutral collisions [normalised frequency]
 
   if (localstate.isSet("collision_frequency")) {
     // Dnn = Vth^2 / sigma
@@ -280,11 +291,8 @@ void NeutralMixed::finally(const Options& state) {
   if (flux_limit > 0.0) {
     // Apply flux limit to diffusion,
     // using the local thermal speed and pressure gradient magnitude
-    Field3D Dmax = flux_limit * sqrt(Tn / AA) /
-      (abs(Grad(logPnlim)) + 1. / neutral_lmax);
-    BOUT_FOR(i, Dmax.getRegion("RGN_NOBNDRY")) {
-      Dnn[i] = BOUTMIN(Dnn[i], Dmax[i]);
-    }
+    Field3D Dmax = flux_limit * sqrt(Tn / AA) / (abs(Grad(logPnlim)) + 1. / neutral_lmax);
+    BOUT_FOR(i, Dmax.getRegion("RGN_NOBNDRY")) { Dnn[i] = BOUTMIN(Dnn[i], Dmax[i]); }
   }
 
   if (diffusion_limit > 0.0) {
@@ -337,8 +345,9 @@ void NeutralMixed::finally(const Options& state) {
   ddt(Nn) = -FV::Div_par_mod<hermes::Limiter>(Nn, Vn, sound_speed) // Advection
       ;
 
-  if (upwind_perp_diffusion) {                                       // Perpendicular diffusion
-      ddt(Nn) += Div_a_Grad_perp_upwind(DnnNn, logPnlim);
+  if (upwind_perp_diffusion) {                                      // Perpendicular advection
+      ddt(Nn) += FV::Div_a_Grad_perp_limit<PerpLimiter>(
+                DnnNn, logPnlim);
     } else {
       ddt(Nn) += FV::Div_a_Grad_perp(DnnNn, logPnlim);
     };
@@ -361,8 +370,9 @@ void NeutralMixed::finally(const Options& state) {
         - Grad_par(Pn)                                                 // Pressure gradient
         ;
 
-    if (upwind_perp_diffusion) {                                       // Perpendicular diffusion
-      ddt(NVn) += Div_a_Grad_perp_upwind(DnnNVn, logPnlim);
+    if (upwind_perp_diffusion) {                                      
+      ddt(NVn) += FV::Div_a_Grad_perp_limit<PerpLimiter>(DnnNVn,
+                                                 logPnlim) // Perpendicular advection;
     } else {
       ddt(NVn) += FV::Div_a_Grad_perp(DnnNVn, logPnlim);
     };
@@ -379,14 +389,10 @@ void NeutralMixed::finally(const Options& state) {
       // eta_n = (2. / 5) * kappa_n;
       //
 
-      ddt(NVn) += AA * FV::Div_par_K_Grad_par((2. / 5) * DnnNn, Vn);     // Parallel viscosity   
-
-
-      if (upwind_perp_diffusion) {                                       // Perpendicular viscosity
-        ddt(NVn) += AA * Div_a_Grad_perp_upwind((2. / 5) * DnnNn, Vn);
-      } else {
-        ddt(NVn) += AA * FV::Div_a_Grad_perp((2. / 5) * DnnNn, Vn);
-      };
+      ddt(NVn) +=
+          AA * FV::Div_a_Grad_perp((2. / 5) * DnnNn, Vn)      // Perpendicular viscosity
+          + AA * FV::Div_par_K_Grad_par((2. / 5) * DnnNn, Vn) // Parallel viscosity
+          ;
     }
 
     if (localstate.isSet("momentum_source")) {
@@ -413,8 +419,9 @@ void NeutralMixed::finally(const Options& state) {
             ;
   };
 
-  if (upwind_perp_diffusion) {                                     // Perpendicular diffusion
-        ddt(Pn) += Div_a_Grad_perp_upwind(DnnPn, logPnlim);    
+  if (upwind_perp_diffusion) {                                     // Perpendicular advection
+        ddt(Pn) += + FV::Div_a_Grad_perp_limit<PerpLimiter>(       
+                DnnPn, logPnlim);                   
       } else {
         ddt(Pn) += FV::Div_a_Grad_perp(DnnPn, logPnlim);
       };
@@ -563,7 +570,6 @@ void NeutralMixed::outputVars(Options& state) {
                     {"long_name", name + " pressure source"},
                     {"species", name},
                     {"source", "neutral_mixed"}});
-
   }
 }
 
