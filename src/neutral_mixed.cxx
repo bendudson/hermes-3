@@ -80,6 +80,11 @@ NeutralMixed::NeutralMixed(const std::string& name, Options& alloptions, Solver*
     .doc("Include neutral gas viscosity?")
     .withDefault<bool>(true);
 
+  maximum_mfp = options["maximum_mfp"]
+    .doc("Optional maximum mean free path in [m] for diffusive processes. < 0 is off")
+    .withDefault(0.2)
+    / meters;   // Normalise
+
   if (precondition) {
     inv = std::unique_ptr<Laplacian>(Laplacian::create(&options["precon_laplace"]));
 
@@ -266,10 +271,10 @@ void NeutralMixed::finally(const Options& state) {
   // Calculate cross-field diffusion from collision frequency
   //
   //
-  BoutReal neutral_lmax =
-      0.1 / get<BoutReal>(state["units"]["meters"]); // Normalised length
 
-  Field3D Rnn = sqrt(Tn / AA) / neutral_lmax; // Neutral-neutral collisions [normalised frequency]
+  // Pseudo collisionality: effectively limits neutral mean
+  // free path to a user setting in [m] representing vessel size
+  Field3D Rnn = sqrt(Tn / AA) / maximum_mfp; 
 
   Vth_1d = 0.25 * sqrt(8 * Tn / (PI * AA));
 
@@ -284,7 +289,7 @@ void NeutralMixed::finally(const Options& state) {
     // Apply flux limit to diffusion,
     // using the local thermal speed and pressure gradient magnitude
     Field3D Dmax = flux_limit * Vth_1d /
-      (abs(Grad(logPnlim)) + 1. / neutral_lmax);
+      (abs(Grad(logPnlim)) + 1. / maximum_mfp);
     BOUT_FOR(i, Dmax.getRegion("RGN_NOBNDRY")) {
       Dnn[i] = BOUTMIN(Dnn[i], Dmax[i]);
     }

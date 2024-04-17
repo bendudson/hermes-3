@@ -52,6 +52,7 @@ private:
 
   BoutReal flux_limit; ///< Diffusive flux limit
   BoutReal diffusion_limit;    ///< Maximum diffusion coefficient
+  BoutReal maximum_mfp;    ///< Arbitrary limit on neutral mfp due to vessel size
 
   bool neutral_viscosity; ///< include viscosity?
   bool evolve_momentum; ///< Evolve parallel momentum?
