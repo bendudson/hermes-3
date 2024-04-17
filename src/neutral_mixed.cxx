@@ -76,6 +76,10 @@ NeutralMixed::NeutralMixed(const std::string& name, Options& alloptions, Solver*
     .withDefault(-1.0)
     / (meters * meters / seconds); // Normalise
 
+  legacy_limiter_vth = options["legacy_limiter_vth"]
+    .doc("Use old (incorrect) formulation for v_th in the neutral flux limiter")
+    .withDefault<bool>(false);
+
   neutral_viscosity = options["neutral_viscosity"]
     .doc("Include neutral gas viscosity?")
     .withDefault<bool>(true);
@@ -272,23 +276,29 @@ void NeutralMixed::finally(const Options& state) {
   //
   //
 
+  
+
+  if (legacy_limiter_vth) {
+    Vth = sqrt(Tn / AA);   // RMS of Maxwellian velocity in 1D system
+  } else {
+    Vth = 0.25 * sqrt(8 * Tn / (PI * AA));   // Mean of Maxwellian velocity magnitude along 1 direction in 3D system
+  }
+
   // Pseudo collisionality: effectively limits neutral mean
   // free path to a user setting in [m] representing vessel size
-  Field3D Rnn = sqrt(Tn / AA) / maximum_mfp; 
-
-  Vth_1d = 0.25 * sqrt(8 * Tn / (PI * AA));
+  Field3D Rnn = Vth / maximum_mfp; 
 
   if (localstate.isSet("collision_frequency")) {
     // Dnn = Vth^2 / sigma
-    Dnn = Vth_1d*Vth_1d / (get<Field3D>(localstate["collision_frequency"]) + Rnn);
+    Dnn = Vth*Vth / (get<Field3D>(localstate["collision_frequency"]) + Rnn);
   } else {
-    Dnn = Vth_1d*Vth_1d / Rnn;
+    Dnn = Vth*Vth / Rnn;
   }
 
   if (flux_limit > 0.0) {
     // Apply flux limit to diffusion,
     // using the local thermal speed and pressure gradient magnitude
-    Field3D Dmax = flux_limit * Vth_1d /
+    Field3D Dmax = flux_limit * Vth /
       (abs(Grad(logPnlim)) + 1. / maximum_mfp);
     BOUT_FOR(i, Dmax.getRegion("RGN_NOBNDRY")) {
       Dnn[i] = BOUTMIN(Dnn[i], Dmax[i]);

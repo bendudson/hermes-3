@@ -36,7 +36,7 @@ private:
   
   Field3D Nn, Pn, NVn; // Density, pressure and parallel momentum
   Field3D Vn; ///< Neutral parallel velocity
-  Field3D Vth_1d; ///< Thermal velocity of Maxwellian in one direction
+  Field3D Vth; ///< Thermal velocity of Maxwellian in one direction
   Field3D Tn; ///< Neutral temperature
   Field3D Nnlim, Pnlim, logPnlim, Vnlim, Tnlim; // Limited in regions of low density
 
@@ -53,6 +53,7 @@ private:
   BoutReal flux_limit; ///< Diffusive flux limit
   BoutReal diffusion_limit;    ///< Maximum diffusion coefficient
   BoutReal maximum_mfp;    ///< Arbitrary limit on neutral mfp due to vessel size
+  bool legacy_limiter_vth;   ///< Use old formulation for thermal velocity in flux limiter?
 
   bool neutral_viscosity; ///< include viscosity?
   bool evolve_momentum; ///< Evolve parallel momentum?
