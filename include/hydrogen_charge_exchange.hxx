@@ -72,7 +72,8 @@ protected:
                        Field3D& R, Field3D& atom_mom, Field3D& ion_mom,
                        Field3D& atom_energy, Field3D& ion_energy, 
                        Field3D& atom_rate, Field3D& ion_rate,
-                       BoutReal& rate_multiplier);
+                       BoutReal& rate_multiplier,
+                       BoutReal& atom2_threshold);
 };
 
 /// Hydrogen charge exchange
@@ -126,6 +127,13 @@ struct HydrogenChargeExchangeIsotope : public HydrogenChargeExchange {
     rate_multiplier = alloptions[{Isotope1}]["K_cx_multiplier"]
                            .doc("Scale the charge exchange rate by this factor")
                            .withDefault<BoutReal>(1.0);
+
+    // WARNING: this option is on a species basis and will apply to any CX reactions that this species
+    // is involved in. Special handling will be required 
+    atom2_threshold =  alloptions[{Isotope1}]["atom2_cx_threshold"]
+                           .doc("Temperature [eV] above which CX makes only atom2 (hot neutrals). Below this CX makes only atom1 (cold neutrals). Default is 0")
+                           .withDefault<BoutReal>(0);
+
   }
 
   void transform(Options& state) override {
@@ -153,7 +161,8 @@ struct HydrogenChargeExchangeIsotope : public HydrogenChargeExchange {
                     state["species"][ion2],                         // e.g. "h+"
                     R, atom_mom, ion_mom, atom_energy, ion_energy,  // Transfer channels
                     atom_rate, ion_rate,                            // Collision rates in s^-1
-                    rate_multiplier);                               // Arbitrary user set multiplier
+                    rate_multiplier,                                // Arbitrary user set multiplier
+                    atom2_threshold);                               // Temperature threshold below which only atom1 produced                   
 
     if (diagnose) {
       // Calculate diagnostics to be written to dump file
@@ -353,6 +362,7 @@ struct HydrogenChargeExchangeIsotope : public HydrogenChargeExchange {
 private:
   bool diagnose; ///< Outputting diagnostics?
   BoutReal rate_multiplier; ///< Multiply rate by arbitrary user set factor
+  BoutReal atom2_threshold; ///< At temps above, CX sources go to atom2, below go to atom1
   Field3D S;     ///< Particle exchange, used if Isotope1 != Isotope2
   Field3D F, F2, Fhot, Fi; ///< Momentum exchange
   Field3D E, E2, Ehot, Ei; ///< Energy exchange
