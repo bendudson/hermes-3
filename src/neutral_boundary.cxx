@@ -391,8 +391,8 @@ void NeutralBoundary::transform(Options& state) {
           // This is rearranged from Power for clarity - note definition of v_th. 
           BoutReal q = 
                         2 * nnsheath * tnsheath * v_th                                                             // Incident energy
-                      - (target_energy_refl_factor * target_fast_refl_fraction ) * 2 * nnsheath * tnsheath * v_th  // Fast reflected energy
-                      - (1 - target_fast_refl_fraction) * T_FC * nnsheath * v_th;                                  // Thermal reflected energy
+                      - (pfr_energy_refl_factor * pfr_fast_refl_fraction ) * 2 * nnsheath * tnsheath * v_th  // Fast reflected energy
+                      - (1 - pfr_fast_refl_fraction) * T_FC * nnsheath * v_th;                                  // Thermal reflected energy
 
 
           // Multiply by radial cell area to get power
@@ -485,8 +485,8 @@ void NeutralBoundary::transform(Options& state) {
           // This is rearranged from Power for clarity - note definition of v_th. 
           BoutReal q = 
                         2 * nnsheath * tnsheath * v_th                                                             // Incident energy
-                      - (target_energy_refl_factor * target_fast_refl_fraction ) * 2 * nnsheath * tnsheath * v_th  // Fast reflected energy
-                      - (1 - target_fast_refl_fraction) * T_FC * nnsheath * v_th;                                  // Thermal reflected energy
+                      - (pfr_energy_refl_factor * pfr_fast_refl_fraction ) * 2 * nnsheath * tnsheath * v_th  // Fast reflected energy
+                      - (1 - pfr_fast_refl_fraction) * T_FC * nnsheath * v_th;                                  // Thermal reflected energy
 
 
           // Multiply by radial cell area to get power
