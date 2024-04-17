@@ -36,6 +36,7 @@ private:
   
   Field3D Nn, Pn, NVn; // Density, pressure and parallel momentum
   Field3D Vn; ///< Neutral parallel velocity
+  Field3D Vth_1d; ///< Thermal velocity of Maxwellian in one direction
   Field3D Tn; ///< Neutral temperature
   Field3D Nnlim, Pnlim, logPnlim, Vnlim, Tnlim; // Limited in regions of low density
 
