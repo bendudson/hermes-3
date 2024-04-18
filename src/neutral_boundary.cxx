@@ -297,8 +297,7 @@ void NeutralBoundary::transform(Options& state) {
 
         // Outgoing neutral heat flux [W/m^2]
         // This is rearranged from Power for clarity - note definition of v_th. 
-        BoutReal q = 
-                      2 * nnsheath * tnsheath * v_th                                                             // Incident energy
+        BoutReal q = 2 * nnsheath * tnsheath * v_th                                                              // Incident energy
                     - (target_energy_refl_factor * target_fast_refl_fraction ) * 2 * nnsheath * tnsheath * v_th  // Fast reflected energy
                     - (1 - target_fast_refl_fraction) * T_FC * nnsheath * v_th;                                  // Thermal reflected energy
 
@@ -368,11 +367,11 @@ void NeutralBoundary::transform(Options& state) {
     }
   }
 
-    // SOL edge
+  // SOL edge
   if (sol) {
-    if(mesh->lastX()){  // Only do this for the processor which has the edge region
-      for(int iy=0; iy < mesh->LocalNy ; iy++){
-        for(int iz=0; iz < mesh->LocalNz; iz++){
+    if (mesh->lastX()) {  // Only do this for the processor which has the edge region
+      for (int iy = 0; iy < mesh->LocalNy; iy++) {
+        for (int iz = 0; iz < mesh->LocalNz; iz++) {
 
           auto i = indexAt(Nn, mesh->xend, iy, iz);  // Final domain cell
           auto ig = indexAt(Nn, mesh->xend+1, iy, iz);  // Guard cell
@@ -389,11 +388,9 @@ void NeutralBoundary::transform(Options& state) {
 
           // Outgoing neutral heat flux [W/m^2]
           // This is rearranged from Power for clarity - note definition of v_th. 
-          BoutReal q = 
-                        2 * nnsheath * tnsheath * v_th                                                             // Incident energy
-                      - (pfr_energy_refl_factor * pfr_fast_refl_fraction ) * 2 * nnsheath * tnsheath * v_th  // Fast reflected energy
-                      - (1 - pfr_fast_refl_fraction) * T_FC * nnsheath * v_th;                                  // Thermal reflected energy
-
+          BoutReal q = 2 * nnsheath * tnsheath * v_th                                                        // Incident energy
+                      - (sol_energy_refl_factor * sol_fast_refl_fraction ) * 2 * nnsheath * tnsheath * v_th  // Fast reflected energy
+                      - (1 - sol_fast_refl_fraction) * T_FC * nnsheath * v_th;                               // Thermal reflected energy
 
           // Multiply by radial cell area to get power
           // Expanded form of the calculation for clarity
@@ -454,7 +451,6 @@ void NeutralBoundary::transform(Options& state) {
           // Subtract from cell next to boundary
           energy_source[i] -= cooling_source;
           wall_energy_source[i] -= cooling_source;
-
         }
 
         }
@@ -465,12 +461,12 @@ void NeutralBoundary::transform(Options& state) {
   // PFR edge
   if (pfr) {
     if ((mesh->firstX()) and (!mesh->periodicY(mesh->xstart))) {  // do loop if inner edge and not periodic (i.e. PFR)
-      for(int iy=0; iy < mesh->LocalNy ; iy++){
-        for(int iz=0; iz < mesh->LocalNz; iz++){
+      for (int iy = 0; iy < mesh->LocalNy ; iy++) {
+        for (int iz = 0; iz < mesh->LocalNz; iz++) {
 
           auto i = indexAt(Nn, mesh->xstart, iy, iz);  // Final domain cell
           auto ig = indexAt(Nn, mesh->xstart-1, iy, iz);  // Guard cell
-          
+
           // Calculate midpoint values at wall
           const BoutReal nnsheath = 0.5 * (Nn[ig] + Nn[i]);
           const BoutReal tnsheath = 0.5 * (Tn[ig] + Tn[i]);
@@ -478,16 +474,14 @@ void NeutralBoundary::transform(Options& state) {
           // Thermal speed of static Maxwellian in one direction
           const BoutReal v_th = 0.25 * sqrt( 8*tnsheath / (PI*AA) );   // Stangeby p.69 eqns. 2.21, 2.24
 
-           // Approach adapted from D. Power thesis 2023
+          // Approach adapted from D. Power thesis 2023
           BoutReal T_FC = 3 / Tnorm; // Franck-Condon temp (hardcoded for now)
 
           // Outgoing neutral heat flux [W/m^2]
           // This is rearranged from Power for clarity - note definition of v_th. 
-          BoutReal q = 
-                        2 * nnsheath * tnsheath * v_th                                                             // Incident energy
+          BoutReal q = 2 * nnsheath * tnsheath * v_th                                                        // Incident energy
                       - (pfr_energy_refl_factor * pfr_fast_refl_fraction ) * 2 * nnsheath * tnsheath * v_th  // Fast reflected energy
-                      - (1 - pfr_fast_refl_fraction) * T_FC * nnsheath * v_th;                                  // Thermal reflected energy
-
+                      - (1 - pfr_fast_refl_fraction) * T_FC * nnsheath * v_th;                               // Thermal reflected energy
 
           // Multiply by radial cell area to get power
           // Expanded form of the calculation for clarity
@@ -548,7 +542,6 @@ void NeutralBoundary::transform(Options& state) {
           // Subtract from cell next to boundary
           energy_source[i] -= cooling_source;
           wall_energy_source[i] -= cooling_source;
-
         }
 
         }
