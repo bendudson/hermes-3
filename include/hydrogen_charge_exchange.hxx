@@ -73,7 +73,8 @@ protected:
                        Field3D& atom_energy, Field3D& ion_energy, 
                        Field3D& atom_rate, Field3D& ion_rate,
                        BoutReal& rate_multiplier,
-                       BoutReal& atom2_threshold);
+                       BoutReal atom2_threshold,
+                       Field3D& atom2_weight);
 };
 
 /// Hydrogen charge exchange
@@ -138,6 +139,7 @@ struct HydrogenChargeExchangeIsotope : public HydrogenChargeExchange {
 
   void transform(Options& state) override {
     Field3D R, atom_mom, ion_mom, atom_energy, ion_energy;
+    Field3D atom2_weight;
 
     // Prepare species names
     std::string atom1{Isotope1};
@@ -162,7 +164,8 @@ struct HydrogenChargeExchangeIsotope : public HydrogenChargeExchange {
                     R, atom_mom, ion_mom, atom_energy, ion_energy,  // Transfer channels
                     atom_rate, ion_rate,                            // Collision rates in s^-1
                     rate_multiplier,                                // Arbitrary user set multiplier
-                    atom2_threshold);                               // Temperature threshold below which only atom1 produced                   
+                    atom2_threshold,                                // Temperature threshold below which only atom1 produced                                
+                    atom2_weight);                               
 
     if (diagnose) {
       // Calculate diagnostics to be written to dump file
@@ -188,9 +191,9 @@ struct HydrogenChargeExchangeIsotope : public HydrogenChargeExchange {
         Fhot = -ion_mom;     // Hot neutrals gain LHS ion momentum
         Fi = -atom_mom;      // RHS ions get cold neutral momentum
 
-        E = -atom_energy;    // Cold neutrals lose energy
-        Ehot = -ion_energy;  // Hot neutrals gain LHS ion energy
-        Ei = -atom_energy;   // RHS ions get cold neutral energy
+        E = -atom_energy*(atom2_weight) + ion_energy*(1-atom2_weight);    // Cold neutrals lose their energy and gain ion energy
+        Ehot = ion_energy*(atom2_weight);  // Hot neutrals gain LHS ion energy
+        Ei = atom_energy - ion_energy;   // RHS ions lose their energy and gain LHS atom energy
 
       } else if ((Isotope1 != Isotope2) and (atom1 == atom2)) {
         // Different isotopes
@@ -266,7 +269,7 @@ struct HydrogenChargeExchangeIsotope : public HydrogenChargeExchange {
                       {"source", "hydrogen_charge_exchange"}});
 
       set_with_attrs(state[std::string("E") + atom2 + ion2 + std::string("_cxt")],   // Hot neutral energy source 
-                     E,
+                     Ehot,
                      {{"time_dimension", "t"},
                       {"units", "W / m^3"},
                       {"conversion", Pnorm * Omega_ci},

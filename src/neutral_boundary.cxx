@@ -353,6 +353,7 @@ void NeutralBoundary::transform(Options& state) {
           cold_atom_energy_source[i] -= cooling_source*weight;   // [W m^-3]  Cold atoms receive the cooling that the hot atoms would have received
           
           // Diagnostics
+          target_energy_source[i] -= q_incident*weight / dv;  
           target_cold_density_source[i] += hot_atom_particle_flow*weight / dv;
           target_cold_energy_source[i] += (q_incident / dv - cooling_source)*weight;
         
@@ -444,6 +445,7 @@ void NeutralBoundary::transform(Options& state) {
           cold_atom_energy_source[i] -= cooling_source*weight;   // [W m^-3]  Cold atoms receive the cooling that the hot atoms would have received
           
           // Diagnostics
+          wall_energy_source[i] -= q_incident*weight / dv;  
           wall_cold_density_source[i] += hot_atom_particle_flow*weight / dv;
           wall_cold_energy_source[i] += (q_incident / dv - cooling_source)*weight;
         
@@ -531,10 +533,11 @@ void NeutralBoundary::transform(Options& state) {
           BoutReal q_incident = 2 * nnsheath * tnsheath * v_th * da;  // [W]
 
           energy_source[i] -= q_incident*weight / dv;            // [W m^-3]  hot atoms lose their entire incident heat
-          cold_atom_energy_source[i] += q_incident*weight/ dv;  // [W m^-3]  Cold atoms get the hot ions' entire incident heat
+          cold_atom_energy_source[i] += q_incident*weight/ dv;   // [W m^-3]  Cold atoms get the hot ions' entire incident heat
           cold_atom_energy_source[i] -= cooling_source*weight;   // [W m^-3]  Cold atoms receive the cooling that the hot atoms would have received
           
           // Diagnostics
+          wall_energy_source[i] -= q_incident*weight / dv;  
           wall_cold_density_source[i] += hot_atom_particle_flow*weight / dv;
           wall_cold_energy_source[i] += (q_incident / dv - cooling_source)*weight;
         

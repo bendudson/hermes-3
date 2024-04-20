@@ -7,7 +7,8 @@ void HydrogenChargeExchange::calculate_rates(Options& atom1, Options& ion1,
                                              Field3D &atom_energy, Field3D &ion_energy,
                                              Field3D &atom_rate, Field3D &ion_rate,
                                              BoutReal &rate_multiplier,
-                                             BoutReal &atom2_threshold) {
+                                             BoutReal atom2_threshold,
+                                             Field3D &atom2_weight) {
 
   // Temperatures and masses of initial atom and ion
   const Field3D Tatom = get<Field3D>(atom1["temperature"]);
@@ -58,7 +59,7 @@ void HydrogenChargeExchange::calculate_rates(Options& atom1, Options& ion1,
   // atom1 + ion1 -> ion2 + atom1*(1-atom2_weight) + atom2*(atom2_weight)
   // Weighting function is a logistic curve centered at provided threshold.
 
-  Field3D atom2_weight = get<Field3D>(atom2["density"]);  // Initialise from arbitrary field
+  atom2_weight = get<Field3D>(atom2["density"]);  // Initialise from arbitrary field
   if (atom2_threshold < -1) {                       // Everything goes to atom1
     atom2_weight = 0;                         
   } else if (atom2_threshold == 0) {                // Everything goes to atom2
