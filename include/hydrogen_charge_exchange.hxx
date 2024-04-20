@@ -72,7 +72,9 @@ protected:
                        Field3D& R, Field3D& atom_mom, Field3D& ion_mom,
                        Field3D& atom_energy, Field3D& ion_energy, 
                        Field3D& atom_rate, Field3D& ion_rate,
-                       BoutReal& rate_multiplier);
+                       BoutReal& rate_multiplier,
+                       BoutReal atom2_threshold,
+                       Field3D& atom2_weight);
 };
 
 /// Hydrogen charge exchange
@@ -114,7 +116,7 @@ protected:
 ///                                + Shd+_cx d/dt(Nh+) = ... - Shd+_cx d/dt(Nd)  = ... -
 ///                                Shd+_cx d/dt(Nd+) = ... + Shd+_cx
 ///
-template <char Isotope1, char Isotope2>
+template <char Isotope1, char Isotope2, char Kind>
 struct HydrogenChargeExchangeIsotope : public HydrogenChargeExchange {
   HydrogenChargeExchangeIsotope(std::string name, Options& alloptions, Solver* solver)
       : HydrogenChargeExchange(name, alloptions, solver) {
@@ -126,35 +128,83 @@ struct HydrogenChargeExchangeIsotope : public HydrogenChargeExchange {
     rate_multiplier = alloptions[{Isotope1}]["K_cx_multiplier"]
                            .doc("Scale the charge exchange rate by this factor")
                            .withDefault<BoutReal>(1.0);
+
+    // WARNING: this option is on a species basis and will apply to any CX reactions that this species
+    // is involved in. Special handling will be required 
+    atom2_threshold =  alloptions[{Isotope1}]["atom2_cx_threshold"]
+                           .doc("Temperature [eV] above which CX makes only atom2 (hot neutrals). Below this CX makes only atom1 (cold neutrals). Default is 0")
+                           .withDefault<BoutReal>(0);
+
   }
 
   void transform(Options& state) override {
     Field3D R, atom_mom, ion_mom, atom_energy, ion_energy;
+    Field3D atom2_weight;
 
-    calculate_rates(state["species"][{Isotope1}],                   // e.g. "h"
-                    state["species"][{Isotope2, '+'}],              // e.g. "d+"
-                    state["species"][{Isotope2}],                   // e.g. "d"
-                    state["species"][{Isotope1, '+'}],              // e.g. "h+"
+    // Prepare species names
+    std::string atom1{Isotope1};
+    std::string ion1{Isotope1, '+'};
+    std::string atom2{Isotope2};
+    std::string ion2{Isotope2, '+'};
+
+    // CX for hot neutral species: add * identifier
+    if (Kind == '*') {
+      atom1 += '*';
+      atom2 += '*';
+
+    // CX for cold -> hot neutrals: add * on product neutral only
+    } else if (Kind == 'x') {
+      atom2 += '*';
+    }
+
+    calculate_rates(state["species"][atom1],                        // e.g. "h"
+                    state["species"][ion1],                         // e.g. "d+"
+                    state["species"][atom2],                        // e.g. "d"
+                    state["species"][ion2],                         // e.g. "h+"
                     R, atom_mom, ion_mom, atom_energy, ion_energy,  // Transfer channels
                     atom_rate, ion_rate,                            // Collision rates in s^-1
-                    rate_multiplier);                               // Arbitrary user set multiplier
+                    rate_multiplier,                                // Arbitrary user set multiplier
+                    atom2_threshold,                                // Temperature threshold below which only atom1 produced                                
+                    atom2_weight);                               
 
     if (diagnose) {
       // Calculate diagnostics to be written to dump file
-      if (Isotope1 == Isotope2) {
-        // Simpler case of same isotopes
+      if ((Isotope1 == Isotope2) and (atom1 == atom2)) {
+        // Simpler case of same isotopes and atoms
         //  - No net particle source/sink
         //  - atoms lose atom_mom, gain ion_mom
         //
         F = ion_mom - atom_mom;       // Momentum transferred to atoms due to CX with ions
         E = ion_energy - atom_energy; // Energy transferred to atoms
-      } else {
+
+      } else if ((Isotope1 == Isotope2) and (atom1 != atom2)) {
+        // Same isotopes, but hot and cold neutral species
+
+        // Properties are transferred from LHS to RHS of reaction:
+        // atom1 + ion1 -> atom2 + ion2
+        // Energy and momentum flow:
+        // - From atom1 (cold) to ion2
+        // - From ion1 to atom2 (hot)
+
+        S = R;               // Source of hot atoms (CX always source of hot atoms)
+        F = -atom_mom;       // Cold neutrals lose momentum
+        Fhot = -ion_mom;     // Hot neutrals gain LHS ion momentum
+        Fi = -atom_mom;      // RHS ions get cold neutral momentum
+
+        E = -atom_energy*(atom2_weight) + ion_energy*(1-atom2_weight);    // Cold neutrals lose their energy and gain ion energy
+        Ehot = ion_energy*(atom2_weight);  // Hot neutrals gain LHS ion energy
+        Ei = atom_energy - ion_energy;   // RHS ions lose their energy and gain LHS atom energy
+
+      } else if ((Isotope1 != Isotope2) and (atom1 == atom2)) {
         // Different isotopes
         S = -R;           // Source of Isotope1 atoms
         F = -atom_mom;    // Source of momentum for Isotope1 atoms
         F2 = -ion_mom;    // Source of momentum for Isotope2 ions
         E = -atom_energy; // Source of energy for Isotope1 atoms
         E2 = -ion_energy; // Source of energy for Isotope2 ions
+
+      } else if ((Isotope1 != Isotope2) and (atom1 != atom2)) {
+        throw BoutException("Multigroup neutral model not yet implemented for more than one plasma isotope");
       }
     }
   }
@@ -171,12 +221,77 @@ struct HydrogenChargeExchangeIsotope : public HydrogenChargeExchange {
     if (diagnose) {
       // Save particle, momentum and energy channels
 
+      // Prepare species names
       std::string atom1{Isotope1};
       std::string ion1{Isotope1, '+'};
       std::string atom2{Isotope2};
       std::string ion2{Isotope2, '+'};
 
-      set_with_attrs(state[{'F', Isotope1, Isotope2, '+', '_', 'c', 'x'}], // e.g Fhd+_cx
+      // CX for hot neutral species: add * identifier
+      if (Kind == '*') {
+        atom1 += '*';
+        atom2 += '*';
+
+      // Transfer CX, cold -> hot neutrals: add * on product neutral only
+      } else if (Kind == 'x') {
+        atom2 += '*';}
+
+      // Diagnostics for CX transfer reactions (cxt)
+      if (Kind == 'x') { 
+      set_with_attrs(state[std::string("F") + atom1 + ion2 + std::string("_cxt")],   // Cold neutral momentum source
+                     F,
+                     {{"time_dimension", "t"},
+                      {"units", "kg m^-2 s^-2"},
+                      {"conversion", SI::Mp * Nnorm * Cs0 * Omega_ci},
+                      {"standard_name", "momentum transfer"},
+                      {"long_name", (std::string("Momentum transfer to ") + atom1
+                                     + " from " + ion2 + " due to CX with " + ion2)},
+                      {"source", "hydrogen_charge_exchange"}});
+
+      set_with_attrs(state[std::string("F") + atom2 + ion2 + std::string("_cxt")],   // Hot neutral momentum source
+                     Fhot,
+                     {{"time_dimension", "t"},
+                      {"units", "kg m^-2 s^-2"},
+                      {"conversion", SI::Mp * Nnorm * Cs0 * Omega_ci},
+                      {"standard_name", "momentum transfer"},
+                      {"long_name", (std::string("Momentum transfer to ") + atom1
+                                     + " from " + ion1 + " due to CX with " + ion1)},
+                      {"source", "hydrogen_charge_exchange"}});
+
+      set_with_attrs(state[std::string("E") + atom1 + ion2 + std::string("_cxt")],   // Cold neutral energy source 
+                     E,
+                     {{"time_dimension", "t"},
+                      {"units", "W / m^3"},
+                      {"conversion", Pnorm * Omega_ci},
+                      {"standard_name", "energy transfer"},
+                      {"long_name", (std::string("Energy transfer to ") + atom1 + " from "
+                                     + ion2 + " due to CX with " + ion2)},
+                      {"source", "hydrogen_charge_exchange"}});
+
+      set_with_attrs(state[std::string("E") + atom2 + ion2 + std::string("_cxt")],   // Hot neutral energy source 
+                     Ehot,
+                     {{"time_dimension", "t"},
+                      {"units", "W / m^3"},
+                      {"conversion", Pnorm * Omega_ci},
+                      {"standard_name", "energy transfer"},
+                      {"long_name", (std::string("Energy transfer to ") + atom2 + " from "
+                                     + ion1 + " due to CX with " + ion1)},
+                      {"source", "hydrogen_charge_exchange"}});
+
+      set_with_attrs(
+                      state[std::string("S") + atom2 + ion2 + std::string("_cxt")], // Hot neutral particle source 
+                      S,
+                      {{"time_dimension", "t"},
+                      {"units", "m^-3 s^-1"},
+                      {"conversion", Nnorm * Omega_ci},
+                      {"standard_name", "particle transfer"},
+                      {"long_name", (std::string("Particle transfer to ") + atom2 + " from " + atom1
+                                      + " due to charge exchange with " + ion1)},
+                      {"source", "hydrogen_charge_exchange"}});
+
+      } else {
+        
+        set_with_attrs(state[std::string("F") + atom1 + ion2 + std::string("_cx")], // e.g Fhd+_cx
                      F,
                      {{"time_dimension", "t"},
                       {"units", "kg m^-2 s^-2"},
@@ -186,17 +301,17 @@ struct HydrogenChargeExchangeIsotope : public HydrogenChargeExchange {
                                      + " from " + ion1 + " due to CX with " + ion2)},
                       {"source", "hydrogen_charge_exchange"}});
 
-      set_with_attrs(state[{'E', Isotope1, Isotope2, '+', '_', 'c', 'x'}], // e.g Edt+_cx
-                     E,
-                     {{"time_dimension", "t"},
-                      {"units", "W / m^3"},
-                      {"conversion", Pnorm * Omega_ci},
-                      {"standard_name", "energy transfer"},
-                      {"long_name", (std::string("Energy transfer to ") + atom1 + " from "
-                                     + ion1 + " due to CX with " + ion2)},
-                      {"source", "hydrogen_charge_exchange"}});
+        set_with_attrs(state[std::string("E") + atom1 + ion2 + std::string("_cx")], // e.g Edt+_cx
+                      E,
+                      {{"time_dimension", "t"},
+                        {"units", "W / m^3"},
+                        {"conversion", Pnorm * Omega_ci},
+                        {"standard_name", "energy transfer"},
+                        {"long_name", (std::string("Energy transfer to ") + atom1 + " from "
+                                      + ion1 + " due to CX with " + ion2)},
+                        {"source", "hydrogen_charge_exchange"}});
 
-      set_with_attrs(state[{'K', Isotope1, Isotope2, '+', '_', 'c', 'x'}], // e.g Kdt+_cx
+        set_with_attrs(state[std::string("K") + atom1 + ion2 + std::string("_cx")], // e.g Kdt+_cx
                      atom_rate,
                      {{"time_dimension", "t"},
                       {"units", "s^-1"},
@@ -205,6 +320,8 @@ struct HydrogenChargeExchangeIsotope : public HydrogenChargeExchange {
                       {"long_name", (std::string("CX collision frequency between") + atom1 + " and "
                                      + ion1 + " producing" + ion2 + " and" + atom2 + ". Note Kab != Kba")},
                       {"source", "hydrogen_charge_exchange"}});
+
+      }
 
       if (Isotope1 != Isotope2) {
         // Different isotope => particle source, second momentum & energy channel
@@ -248,37 +365,58 @@ struct HydrogenChargeExchangeIsotope : public HydrogenChargeExchange {
 private:
   bool diagnose; ///< Outputting diagnostics?
   BoutReal rate_multiplier; ///< Multiply rate by arbitrary user set factor
+  BoutReal atom2_threshold; ///< At temps above, CX sources go to atom2, below go to atom1
   Field3D S;     ///< Particle exchange, used if Isotope1 != Isotope2
-  Field3D F, F2; ///< Momentum exchange
-  Field3D E, E2; ///< Energy exchange
+  Field3D F, F2, Fhot, Fi; ///< Momentum exchange
+  Field3D E, E2, Ehot, Ei; ///< Energy exchange
   Field3D atom_rate, ion_rate; ///< Collision rates in s^-1
 };
 
 namespace {
 /// Register three components, one for each hydrogen isotope
 /// so no isotope dependence included.
-RegisterComponent<HydrogenChargeExchangeIsotope<'h', 'h'>>
+
+/// Regular neutrals
+RegisterComponent<HydrogenChargeExchangeIsotope<'h', 'h', '.'>>
     register_cx_hh("h + h+ -> h+ + h");
-RegisterComponent<HydrogenChargeExchangeIsotope<'d', 'd'>>
+RegisterComponent<HydrogenChargeExchangeIsotope<'d', 'd', '.'>>
     register_cx_dd("d + d+ -> d+ + d");
-RegisterComponent<HydrogenChargeExchangeIsotope<'t', 't'>>
+RegisterComponent<HydrogenChargeExchangeIsotope<'t', 't', '.'>>
     register_cx_tt("t + t+ -> t+ + t");
 
+/// Hot neutrals
+RegisterComponent<HydrogenChargeExchangeIsotope<'h', 'h', '*'>>
+    register_cxh_hh("h* + h+ -> h+ + h*");
+RegisterComponent<HydrogenChargeExchangeIsotope<'d', 'd', '*'>>
+    register_cxh_dd("d* + d+ -> d+ + d*");
+RegisterComponent<HydrogenChargeExchangeIsotope<'t', 't', '*'>>
+    register_cxh_tt("t* + t+ -> t+ + t*");
+
+/// Cold -> hot neutrals
+RegisterComponent<HydrogenChargeExchangeIsotope<'h', 'h', 'x'>>
+    register_cxt_hh("h + h+ -> h+ + h*");
+RegisterComponent<HydrogenChargeExchangeIsotope<'d', 'd', 'x'>>
+    register_cxt_dd("d + d+ -> d+ + d*");
+RegisterComponent<HydrogenChargeExchangeIsotope<'t', 't', 'x'>>
+    register_cxt_tt("t + t+ -> t+ + t*");
+
+
+// TODO: Implement hot neutrals for these
 // Charge exchange between different isotopes
-RegisterComponent<HydrogenChargeExchangeIsotope<'h', 'd'>>
-    register_cx_hd("h + d+ -> h+ + d");
-RegisterComponent<HydrogenChargeExchangeIsotope<'d', 'h'>>
-    register_cx_dh("d + h+ -> d+ + h");
+// RegisterComponent<HydrogenChargeExchangeIsotope<'h', 'd'>>
+//     register_cx_hd("h + d+ -> h+ + d");
+// RegisterComponent<HydrogenChargeExchangeIsotope<'d', 'h'>>
+//     register_cx_dh("d + h+ -> d+ + h");
 
-RegisterComponent<HydrogenChargeExchangeIsotope<'h', 't'>>
-    register_cx_ht("h + t+ -> h+ + t");
-RegisterComponent<HydrogenChargeExchangeIsotope<'t', 'h'>>
-    register_cx_th("t + h+ -> t+ + h");
+// RegisterComponent<HydrogenChargeExchangeIsotope<'h', 't'>>
+//     register_cx_ht("h + t+ -> h+ + t");
+// RegisterComponent<HydrogenChargeExchangeIsotope<'t', 'h'>>
+//     register_cx_th("t + h+ -> t+ + h");
 
-RegisterComponent<HydrogenChargeExchangeIsotope<'d', 't'>>
-    register_cx_dt("d + t+ -> d+ + t");
-RegisterComponent<HydrogenChargeExchangeIsotope<'t', 'd'>>
-    register_cx_td("t + d+ -> t+ + d");
+// RegisterComponent<HydrogenChargeExchangeIsotope<'d', 't'>>
+//     register_cx_dt("d + t+ -> d+ + t");
+// RegisterComponent<HydrogenChargeExchangeIsotope<'t', 'd'>>
+//     register_cx_td("t + d+ -> t+ + d");
 } // namespace
 
 #endif // HYDROGEN_CHARGE_EXCHANGE_H

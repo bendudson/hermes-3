@@ -6,7 +6,9 @@ void HydrogenChargeExchange::calculate_rates(Options& atom1, Options& ion1,
                                              Field3D &atom_mom, Field3D &ion_mom,
                                              Field3D &atom_energy, Field3D &ion_energy,
                                              Field3D &atom_rate, Field3D &ion_rate,
-                                             BoutReal &rate_multiplier) {
+                                             BoutReal &rate_multiplier,
+                                             BoutReal atom2_threshold,
+                                             Field3D &atom2_weight) {
 
   // Temperatures and masses of initial atom and ion
   const Field3D Tatom = get<Field3D>(atom1["temperature"]);
@@ -43,22 +45,43 @@ void HydrogenChargeExchange::calculate_rates(Options& atom1, Options& ion1,
   // Optionally multiply by arbitrary multiplier
   const Field3D sigmav = exp(ln_sigmav) * (1e-6 * Nnorm / FreqNorm) * rate_multiplier;
 
-  const Field3D Natom = floor(get<Field3D>(atom1["density"]), 1e-5);
+  // The floor was to provide some minimum CX in low dens regions to prevent division by almost 0.
+  // This is now removed because it causes the reaction to never stop - this is a problem if there are 
+  // density sources in the reaction. 
+  // const Field3D Natom = floor(get<Field3D>(atom1["density"]), 1e-5);   
+  const Field3D Natom = get<Field3D>(atom1["density"]);
   const Field3D Nion = floor(get<Field3D>(ion1["density"]), 1e-5);
 
   R = Natom * Nion * sigmav; // Rate coefficient. This is an output parameter.
+
+  // Weights for two population (hot neutral) model
+  // This biases the sources on RHS of the CX reaction towards atom2 instead of atom1
+  // atom1 + ion1 -> ion2 + atom1*(1-atom2_weight) + atom2*(atom2_weight)
+  // Weighting function is a logistic curve centered at provided threshold.
+
+  atom2_weight = get<Field3D>(atom2["density"]);  // Initialise from arbitrary field
+  if (atom2_threshold < -1) {                       // Everything goes to atom1
+    atom2_weight = 0;                         
+  } else if (atom2_threshold == 0) {                // Everything goes to atom2
+    atom2_weight = 1; 
+  } else {                                          // Weighting function
+    atom2_weight = 1 / (1 + exp(-0.5*(Tion - atom2_threshold)));  
+  }
 
   if ((&atom1 != &atom2) or (&ion1 != &ion2)) {
     // Transfer particles atom1 -> ion2, ion1 -> atom2
     subtract(atom1["density_source"], R);
     add(ion2["density_source"], R);
     subtract(ion1["density_source"], R);
-    add(atom2["density_source"], R);
+    add(atom1["density_source"], R * (1-atom2_weight));  
+    add(atom2["density_source"], R * (atom2_weight)); 
   } // Skip the case where the same isotope swaps places
 
   // Transfer momentum
   auto atom1_velocity = get<Field3D>(atom1["velocity"]);
   auto ion1_velocity = get<Field3D>(ion1["velocity"]);
+  auto ion2_velocity = get<Field3D>(ion2["velocity"]);
+  auto atom2_velocity = get<Field3D>(atom2["velocity"]);
 
   // Transfer fom atom1 to ion2
   atom_mom = R * Aatom * atom1_velocity;
@@ -68,19 +91,17 @@ void HydrogenChargeExchange::calculate_rates(Options& atom1, Options& ion1,
   // Transfer from ion1 to atom2
   ion_mom = R * Aion * ion1_velocity;
   subtract(ion1["momentum_source"], ion_mom);
-  add(atom2["momentum_source"], ion_mom);
+  add(atom1["momentum_source"], ion_mom * (1-atom2_weight));
+  add(atom2["momentum_source"], ion_mom * (atom2_weight));
 
   // Frictional heating: Friction force between ions and atoms
   // converts kinetic energy to thermal energy
   //
   // This handles the general case that ion1 != ion2
   // and atom1 != atom2
-
-  auto ion2_velocity = get<Field3D>(ion2["velocity"]);
   add(ion2["energy_source"], 0.5 * Aatom * R * SQ(ion2_velocity - atom1_velocity));
-
-  auto atom2_velocity = get<Field3D>(atom2["velocity"]);
-  add(atom2["energy_source"], 0.5 * Aion * R * SQ(atom2_velocity - ion1_velocity));
+  add(atom1["energy_source"], 0.5 * Aion * R * SQ(atom1_velocity - ion1_velocity) * (1-atom2_weight));
+  add(atom2["energy_source"], 0.5 * Aion * R * SQ(atom2_velocity - ion1_velocity) * (atom2_weight));
 
   // Transfer thermal energy
   atom_energy = (3. / 2) * R * Tatom;
@@ -89,7 +110,8 @@ void HydrogenChargeExchange::calculate_rates(Options& atom1, Options& ion1,
 
   ion_energy = (3. / 2) * R * Tion;
   subtract(ion1["energy_source"], ion_energy);
-  add(atom2["energy_source"], ion_energy);
+  add(atom1["energy_source"], ion_energy * (1-atom2_weight));
+  add(atom2["energy_source"], ion_energy * (atom2_weight));
 
   // Update collision frequency for the two colliding species in s^-1
   atom_rate = Nion * sigmav;
