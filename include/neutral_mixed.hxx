@@ -51,6 +51,7 @@ private:
 
   BoutReal flux_limit; ///< Diffusive flux limit
   BoutReal diffusion_limit;    ///< Maximum diffusion coefficient
+  BoutReal maximum_mfp;   ///< Reduce diffusion using physical MFP limit
 
   bool neutral_viscosity; ///< include viscosity?
   bool neutral_conduction; ///< Include heat conduction?

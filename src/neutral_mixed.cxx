@@ -75,6 +75,12 @@ NeutralMixed::NeutralMixed(const std::string& name, Options& alloptions, Solver*
           .doc("Limit diffusive fluxes to fraction of thermal speed. <0 means off.")
           .withDefault(0.2);
 
+  maximum_mfp =
+      options["maximum_mfp"]
+          .doc("Add a pseudo-collisionality representing physical MFP limit to pressure diffusion model")
+          .withDefault(0.1) 
+                    / get<BoutReal>(alloptions["units"]["meters"]);
+
   diffusion_limit = options["diffusion_limit"]
                         .doc("Upper limit on diffusion coefficient [m^2/s]. <0 means off")
                         .withDefault(-1.0)
@@ -278,23 +284,21 @@ void NeutralMixed::finally(const Options& state) {
   // Calculate cross-field diffusion from collision frequency
   //
   //
-  BoutReal neutral_lmax =
-      0.1 / get<BoutReal>(state["units"]["meters"]); // Normalised length
 
-  Field3D Rnn =
-    sqrt(floor(Tn, 1e-5) / AA) / neutral_lmax; // Neutral-neutral collisions [normalised frequency]
+  Field3D mfp_pseudo_nu =
+    sqrt(floor(Tn, 1e-5) / AA) / maximum_mfp; // Neutral-neutral collisions [normalised frequency]
 
   if (localstate.isSet("collision_frequency")) {
     // Dnn = Vth^2 / sigma
-    Dnn = (Tn / AA) / (get<Field3D>(localstate["collision_frequency"]) + Rnn);
+    Dnn = (Tn / AA) / (get<Field3D>(localstate["collision_frequency"]) + mfp_pseudo_nu);
   } else {
-    Dnn = (Tn / AA) / Rnn;
+    Dnn = (Tn / AA) / mfp_pseudo_nu;
   }
 
   if (flux_limit > 0.0) {
     // Apply flux limit to diffusion,
     // using the local thermal speed and pressure gradient magnitude
-    Field3D Dmax = flux_limit * sqrt(Tn / AA) / (abs(Grad(logPnlim)) + 1. / neutral_lmax);
+    Field3D Dmax = flux_limit * sqrt(Tn / AA) / (abs(Grad(logPnlim)) + 1. / maximum_mfp);
     BOUT_FOR(i, Dmax.getRegion("RGN_NOBNDRY")) { Dnn[i] = BOUTMIN(Dnn[i], Dmax[i]); }
   }
 
