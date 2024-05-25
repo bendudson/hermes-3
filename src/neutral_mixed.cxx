@@ -299,6 +299,9 @@ void NeutralMixed::finally(const Options& state) {
     Dnn = (Tn / AA) / mfp_pseudo_nu;
   }
 
+  gradlogP = abs(Grad(logPnlim));
+  gradperplogP = abs(Grad_perp(logPnlim));
+
   if (flux_limit > 0.0) {
     // Apply flux limit to diffusion,
     // using the local thermal speed and pressure gradient magnitude
@@ -559,6 +562,27 @@ void NeutralMixed::outputVars(Options& state) {
                     {"conversion", Cs0 * Cs0 / Omega_ci},
                     {"standard_name", "diffusion coefficient"},
                     {"long_name", name + " diffusion coefficient"},
+                    {"source", "neutral_mixed"}});
+    set_with_attrs(state[std::string("Dmax_") + name], Dmax,
+                   {{"time_dimension", "t"},
+                    {"units", "m^2/s"},
+                    {"conversion", Cs0 * Cs0 / Omega_ci},
+                    {"standard_name", "max diffusion coefficient"},
+                    {"long_name", name + " max diffusion coefficient"},
+                    {"source", "neutral_mixed"}});
+    set_with_attrs(state[std::string("gradlogP_") + name], gradlogP,
+                   {{"time_dimension", "t"},
+                    {"units", "m^-1"},
+                    {"conversion", 1 / rho_s0},
+                    {"standard_name", "inv. P gradient length scale"},
+                    {"long_name", name + " inv. P gradient length scale"},
+                    {"source", "neutral_mixed"}});
+    set_with_attrs(state[std::string("gradperplogP_") + name], gradperplogP,
+                   {{"time_dimension", "t"},
+                    {"units", "m^-1"},
+                    {"conversion", 1 / rho_s0},
+                    {"standard_name", "inv. P perp gradient length scale"},
+                    {"long_name", name + " inv. P perp gradient length scale"},
                     {"source", "neutral_mixed"}});
     set_with_attrs(state[std::string("SN") + name], Sn,
                    {{"time_dimension", "t"},
