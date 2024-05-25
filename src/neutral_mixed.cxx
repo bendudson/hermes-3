@@ -94,6 +94,10 @@ NeutralMixed::NeutralMixed(const std::string& name, Options& alloptions, Solver*
                           .doc("Include neutral gas heat conduction?")
                           .withDefault<bool>(true);
 
+  fix_D_gradient = options["fix_D_gradient"]
+                          .doc("Correctly use Grad_perp instead of Grad in the D calculation?")
+                          .withDefault<bool>(true);
+
   if (precondition) {
     inv = std::unique_ptr<Laplacian>(Laplacian::create(&options["precon_laplace"]));
 
@@ -298,7 +302,12 @@ void NeutralMixed::finally(const Options& state) {
   if (flux_limit > 0.0) {
     // Apply flux limit to diffusion,
     // using the local thermal speed and pressure gradient magnitude
-    Field3D Dmax = flux_limit * sqrt(Tn / AA) / (abs(Grad(logPnlim)) + 1. / maximum_mfp);
+    Field3D Dmax = flux_limit * sqrt(Tn / AA) / (abs(Grad(logPnlim)) + 1. / mfp_pseudo_nu);
+
+    if (fix_D_gradient) {
+      Dmax = flux_limit * sqrt(Tn / AA) / (abs(Grad_perp(logPnlim)) + 1. / mfp_pseudo_nu);
+    }
+
     BOUT_FOR(i, Dmax.getRegion("RGN_NOBNDRY")) { Dnn[i] = BOUTMIN(Dnn[i], Dmax[i]); }
   }
 
