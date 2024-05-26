@@ -294,10 +294,12 @@ void NeutralMixed::finally(const Options& state) {
 
   if (localstate.isSet("collision_frequency")) {
     // Dnn = Vth^2 / sigma
-    Dnn = (Tn / AA) / (get<Field3D>(localstate["collision_frequency"]) + mfp_pseudo_nu);
+    Dnn_unlimited = (Tn / AA) / (get<Field3D>(localstate["collision_frequency"]) + mfp_pseudo_nu);
   } else {
-    Dnn = (Tn / AA) / mfp_pseudo_nu;
+    Dnn_unlimited = (Tn / AA) / mfp_pseudo_nu;
   }
+
+  Dnn = 0;
 
   gradlogP = abs(Grad(logPnlim));
   gradperplogP = abs(Grad_perp(logPnlim));
@@ -311,13 +313,13 @@ void NeutralMixed::finally(const Options& state) {
       Dmax = flux_limit * sqrt(Tn / AA) / (abs(Grad_perp(logPnlim)) + 1. / maximum_mfp);
     }
 
-    BOUT_FOR(i, Dmax.getRegion("RGN_NOBNDRY")) { Dnn[i] = BOUTMIN(Dnn[i], Dmax[i]); }
+    BOUT_FOR(i, Dmax.getRegion("RGN_NOBNDRY")) { Dnn[i] = BOUTMIN(Dnn_unlimited[i], Dmax[i]); }
   }
 
   if (diffusion_limit > 0.0) {
     // Impose an upper limit on the diffusion coefficient
-    BOUT_FOR(i, Dnn.getRegion("RGN_NOBNDRY")) {
-      Dnn[i] = BOUTMIN(Dnn[i], diffusion_limit);
+    BOUT_FOR(i, Dnn_unlimited.getRegion("RGN_NOBNDRY")) {
+      Dnn[i] = BOUTMIN(Dnn_unlimited[i], diffusion_limit);
     }
   }
 
@@ -562,6 +564,13 @@ void NeutralMixed::outputVars(Options& state) {
                     {"conversion", Cs0 * Cs0 / Omega_ci},
                     {"standard_name", "diffusion coefficient"},
                     {"long_name", name + " diffusion coefficient"},
+                    {"source", "neutral_mixed"}});
+    set_with_attrs(state[std::string("Dnn_unlim") + name], Dnn_unlimited,
+                   {{"time_dimension", "t"},
+                    {"units", "m^2/s"},
+                    {"conversion", Cs0 * Cs0 / Omega_ci},
+                    {"standard_name", "unlimited diffusion coefficient"},
+                    {"long_name", name + " unlimited diffusion coefficient"},
                     {"source", "neutral_mixed"}});
     set_with_attrs(state[std::string("Dmax_") + name], Dmax,
                    {{"time_dimension", "t"},

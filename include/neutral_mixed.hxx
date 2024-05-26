@@ -41,8 +41,10 @@ private:
 
   BoutReal AA; ///< Atomic mass (proton = 1)
 
-  Field3D Dnn; ///< Diffusion coefficient
+  Field3D Dnn, Dnn_unlimited; ///< Diffusion coefficient
   Field3D DnnNn, DnnPn, DnnNVn;
+  Field3D Dmax;
+  Field3D gradlogP, gradperplogP;
 
   bool sheath_ydown, sheath_yup;
 
@@ -62,8 +64,7 @@ private:
   bool precondition {true}; ///< Enable preconditioner?
   bool lax_flux; ///< Use Lax flux for advection terms
   bool fix_D_gradient; ///< Correctly use Grad_perp instead of Grad in D calc?
-  Field3D Dmax;
-  Field3D gradlogP, gradperplogP;
+  
   std::unique_ptr<Laplacian> inv; ///< Laplacian inversion used for preconditioning
 
   Field3D density_source, pressure_source; ///< External input source
