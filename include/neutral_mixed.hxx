@@ -66,7 +66,6 @@ private:
 
   bool precondition {true}; ///< Enable preconditioner?
   bool lax_flux; ///< Use Lax flux for advection terms
-  bool fix_D_gradient; ///< Correctly use Grad_perp instead of Grad in D calc?
   
   std::unique_ptr<Laplacian> inv; ///< Laplacian inversion used for preconditioning
 
