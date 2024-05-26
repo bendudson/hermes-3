@@ -41,6 +41,10 @@ EvolvePressure::EvolvePressure(std::string name, Options& alloptions, Solver* so
                            .doc("Perpendicular diffusion at low pressure")
                            .withDefault<bool>(false);
 
+  conduction_collisions_mode = options["conduction_collisions_mode"]
+      .doc("Can be legacy: all collisions, or braginskii: self collisions and ie")
+      .withDefault<std::string>("legacy");
+
   if (evolve_log) {
     // Evolve logarithm of pressure
     solver->add(logP, std::string("logP") + name);
@@ -148,6 +152,7 @@ EvolvePressure::EvolvePressure(std::string name, Options& alloptions, Solver* so
   neumann_boundary_average_z = p_options["neumann_boundary_average_z"]
     .doc("Apply neumann boundary with Z average?")
     .withDefault<bool>(false);
+
 }
 
 void EvolvePressure::transform(Options& state) {
@@ -286,8 +291,81 @@ void EvolvePressure::finally(const Options& state) {
   // Parallel heat conduction
   if (thermal_conduction) {
 
-    // Calculate ion collision times
-    const Field3D tau = 1. / floor(get<Field3D>(species["collision_frequency"]), 1e-10);
+    // Collisionality
+    // Braginskii mode: plasma - self collisions and ei, neutrals - CX, IZ
+    if (collision_names.empty()) {     /// Calculate only once - at the beginning
+
+      if (conduction_collisions_mode == "braginskii") {
+        for (const auto& collision : species["collision_frequencies"].getChildren()) {
+
+          std::string collision_name = collision.second.name();
+
+          if (identifySpeciesType(species.name()) == "neutral") {
+            if (/// Charge exchange
+                (collisionSpeciesMatch(    
+                  collision_name, species.name(), "+", "cx", "partial")) or
+                /// Ionisation
+                (collisionSpeciesMatch(    
+                  collision_name, species.name(), "+", "iz", "partial"))) {
+                    collision_names.push_back(collision_name);
+                  }
+
+          } else if (identifySpeciesType(species.name()) == "electron") {
+            if (/// Electron-electron collisions
+                (collisionSpeciesMatch(    
+                  collision_name, species.name(), "e", "coll", "exact"))) {
+                    collision_names.push_back(collision_name);
+                  }
+
+          } else if (identifySpeciesType(species.name()) == "ion") {
+            if (/// Self-collisions
+                (collisionSpeciesMatch(    
+                  collision_name, species.name(), species.name(), "coll", "exact"))) {
+                    collision_names.push_back(collision_name);
+                  }
+          }
+          
+        }
+      // Legacy mode: all collisions and CX are included
+      } else if (conduction_collisions_mode == "legacy") {
+        for (const auto& collision : species["collision_frequencies"].getChildren()) {
+
+          std::string collision_name = collision.second.name();
+
+          if (/// Charge exchange
+              (collisionSpeciesMatch(    
+                collision_name, species.name(), "", "cx", "partial")) or
+              /// Any collision (en, in, ee, ii, nn)
+              (collisionSpeciesMatch(    
+                collision_name, species.name(), "", "coll", "partial"))) {
+                  collision_names.push_back(collision_name);
+                }
+        }
+        
+      } else {
+        throw BoutException("\tconduction_collisions_mode for {:s} must be either legacy or braginskii", species.name());
+      }
+
+      /// Write chosen collisions to log file
+      output_info.write("\t{:s} conduction collisionality mode: '{:s}' using ",
+                      species.name(), conduction_collisions_mode);
+      for (const auto& collision : collision_names) {        
+        output_info.write("{:s} ", collision);
+      }
+
+      output_info.write("\n");
+
+      }
+
+    /// Collect the collisionalities based on list of names
+    nu = 0;
+    for (const auto& collision_name : collision_names) {
+      nu += GET_VALUE(Field3D, species["collision_frequencies"][collision_name]);
+    }
+
+
+        // Calculate ion collision times
+    const Field3D tau = 1. / floor(nu, 1e-10);
     const BoutReal AA = get<BoutReal>(species["AA"]); // Atomic mass
 
     // Parallel heat conduction
@@ -434,6 +512,13 @@ void EvolvePressure::outputVars(Options& state) {
                       {"units", "W / m / eV"},
                       {"conversion", Pnorm * Omega_ci * SQ(rho_s0)},
                       {"long_name", name + " heat conduction coefficient"},
+                      {"species", name},
+                      {"source", "evolve_pressure"}});
+      set_with_attrs(state[std::string("K") + name + std::string("_cond")], nu,
+                     {{"time_dimension", "t"},
+                      {"units", "s^-1"},
+                      {"conversion", Omega_ci},
+                      {"long_name", "collision frequency for conduction"},
                       {"species", name},
                       {"source", "evolve_pressure"}});
     }

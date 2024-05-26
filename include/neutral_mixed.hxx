@@ -45,6 +45,9 @@ private:
   Field3D DnnNn, DnnPn, DnnNVn;
   Field3D Dmax;
   Field3D gradlogP, gradperplogP;
+  Field3D nu; ///< Collisionality to use for diffusion
+  std::vector<std::string> collision_names; ///< Collisions used for collisionality
+  std::string diffusion_collisions_mode;  ///< Collision selection, either afn or legacy
 
   bool sheath_ydown, sheath_yup;
 
