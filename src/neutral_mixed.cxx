@@ -95,6 +95,10 @@ NeutralMixed::NeutralMixed(const std::string& name, Options& alloptions, Solver*
                           .doc("Include neutral gas heat conduction?")
                           .withDefault<bool>(true);
 
+  legacy_vth_limiter = options["legacy_vth_limiter"]
+                          .doc("Use old formulation for Vth in limiter?")
+                          .withDefault<bool>(true);
+
   diffusion_collisions_mode = options["diffusion_collisions_mode"]
       .doc("Can be legacy: all enabled collisions excl. IZ, or afn: CX, IZ and NN collisions")
       .withDefault<std::string>("legacy");
@@ -353,6 +357,7 @@ void NeutralMixed::finally(const Options& state) {
 
 
     // Dnn = Vth^2 / sigma
+    // This thermal speed is isotropic, so sqrt(T/m)
     Dnn_unlimited = (Tn / AA) / (nu + mfp_pseudo_nu);
   } else {
     Dnn_unlimited = (Tn / AA) / mfp_pseudo_nu;
@@ -363,10 +368,19 @@ void NeutralMixed::finally(const Options& state) {
   gradlogP = abs(Grad(logPnlim));
   gradperplogP = abs(Grad_perp(logPnlim));
 
+
+
   if (flux_limit > 0.0) {
     // Apply flux limit to diffusion,
     // using the local thermal speed and pressure gradient magnitude
-    Dmax = flux_limit * sqrt(Tn / AA) / (abs(Grad_perp(logPnlim)) + 1. / maximum_mfp);
+
+    if (legacy_vth_limiter) {
+      vth = sqrt(Tn / AA);
+    } else {
+      vth = 0.25 * sqrt((8 * Tn) / (PI * AA));
+    }
+
+    Dmax = flux_limit * vth / (abs(Grad_perp(logPnlim)) + 1. / maximum_mfp);
 
 
     BOUT_FOR(i, Dmax.getRegion("RGN_NOBNDRY")) { Dnn[i] = BOUTMIN(Dnn_unlimited[i], Dmax[i]); }
