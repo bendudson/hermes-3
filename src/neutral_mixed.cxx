@@ -98,6 +98,10 @@ NeutralMixed::NeutralMixed(const std::string& name, Options& alloptions, Solver*
                      .doc("Force conduction and viscosity limiters to use the advection limiter?")
                      .withDefault<bool>(false);
 
+  legacy_limiter = options["legacy_limiter"]
+                     .doc("Use old form of the flux limiter?")
+                     .withDefault<bool>(false);
+
   maximum_mfp =
       options["maximum_mfp"]
           .doc("Add a pseudo-collisionality representing physical MFP limit to pressure diffusion model")
@@ -319,7 +323,7 @@ void NeutralMixed::finally(const Options& state) {
   //
 
   Field3D mfp_pseudo_nu =
-    sqrt(floor(Tn, 1e-5) / AA) / maximum_mfp; // Neutral-neutral collisions [normalised frequency]
+    sqrt(floor(Tn, 1e-5) / AA) / maximum_mfp; // Pseudo-collisionality due to vessel size MFP limit
 
   if (localstate.isSet("collision_frequency")) {
 
@@ -381,9 +385,25 @@ void NeutralMixed::finally(const Options& state) {
 
     // Dnn = Vth^2 / sigma
     // This thermal speed is isotropic, so sqrt(T/m)
-    Dnn = (Tn / AA) / (nu + mfp_pseudo_nu);
+    Dnn_unlimited = (Tn / AA) / (nu + mfp_pseudo_nu);
   } else {
-    Dnn = (Tn / AA) / mfp_pseudo_nu;
+    Dnn_unlimited = (Tn / AA) / mfp_pseudo_nu;
+  }
+
+  if (legacy_vth_limiter) {
+    vth = sqrt(Tn / AA);
+  } else {
+    vth = 0.25 * sqrt((8 * Tn) / (PI * AA));
+  }
+
+  // Legacy flux limiter: limit Dn upstream
+  Dnn = 0;
+  if (legacy_limiter) {
+    Dmax = flux_limit * vth / (abs(Grad_perp(logPnlim)) + 1. / maximum_mfp);
+    BOUT_FOR(i, Dmax.getRegion("RGN_NOBNDRY")) { Dnn[i] = BOUTMIN(Dnn_unlimited[i], Dmax[i]); }
+  } else {
+    Dmax = Dnn_unlimited;
+    Dnn = Dnn_unlimited;
   }
 
   if (diffusion_limit > 0.0) {
@@ -424,11 +444,6 @@ void NeutralMixed::finally(const Options& state) {
   gradlogP = abs(Grad(logPnlim));
   gradperplogP = abs(Grad_perp(logPnlim));
 
-  if (legacy_vth_limiter) {
-    vth = sqrt(Tn / AA);
-  } else {
-    vth = 0.25 * sqrt((8 * Tn) / (PI * AA));
-  }
 
   //// Calculate flux limiting factors for perpendicular transport only
   advection_factor = 1;
@@ -469,9 +484,17 @@ void NeutralMixed::finally(const Options& state) {
     viscosity_factor = 1;
   }
 
+  // Force conduction/viscosity to use advection limiter like before
   if (override_limiter) {
     conduction_factor = advection_factor;
     viscosity_factor = advection_factor;
+  }
+
+  // Set all flux factors to 1, use limited Dnn instead (see upstream)
+  if (legacy_limiter) {
+    advection_factor = 1;
+    conduction_factor = 1;
+    viscosity_factor = 1;
   }
 
   
@@ -693,6 +716,20 @@ void NeutralMixed::outputVars(Options& state) {
                     {"conversion", Cs0 * Cs0 / Omega_ci},
                     {"standard_name", "diffusion coefficient"},
                     {"long_name", name + " diffusion coefficient"},
+                    {"source", "neutral_mixed"}});
+    set_with_attrs(state[std::string("Dnn_unlim") + name], Dnn_unlimited,
+                   {{"time_dimension", "t"},
+                    {"units", "m^2/s"},
+                    {"conversion", Cs0 * Cs0 / Omega_ci},
+                    {"standard_name", "unlimited diffusion coefficient"},
+                    {"long_name", name + " unlimited diffusion coefficient"},
+                    {"source", "neutral_mixed"}});
+    set_with_attrs(state[std::string("Dmax_") + name], Dmax,
+                   {{"time_dimension", "t"},
+                    {"units", "m^2/s"},
+                    {"conversion", Cs0 * Cs0 / Omega_ci},
+                    {"standard_name", "max diffusion coefficient"},
+                    {"long_name", name + " max diffusion coefficient"},
                     {"source", "neutral_mixed"}});
     set_with_attrs(state[std::string("gradlogP_") + name], gradlogP,
                    {{"time_dimension", "t"},

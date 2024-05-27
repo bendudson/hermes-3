@@ -60,6 +60,8 @@ private:
   Field3D vth;   ///< Thermal speed to use in flux limiter
   bool legacy_vth_limiter;
   bool override_limiter;   // Force conduction and viscosity limiters to use the advection limiter?
+  bool legacy_limiter; 
+  
   // Limit perpendicular advection fluxes to fraction of thermal speed.
   BoutReal advection_limit_alpha, conduction_limit_alpha, viscosity_limit_alpha;  // Limiters
   BoutReal flux_limit_gamma;   ///< Sharpness of perpendicular flux limitation. Usually 1 or 2
