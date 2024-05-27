@@ -71,10 +71,32 @@ NeutralMixed::NeutralMixed(const std::string& name, Options& alloptions, Solver*
                      .doc("Enable stabilising lax flux?")
                      .withDefault<bool>(true);
 
-  flux_limit =
-      options["flux_limit"]
-          .doc("Limit diffusive fluxes to fraction of thermal speed. <0 means off.")
-          .withDefault(0.2);
+  // flux_limit =
+  //     options["flux_limit"]
+  //         .doc("Limit diffusive fluxes to fraction of thermal speed. <0 means off.")
+  //         .withDefault(0.2);
+
+  advection_limit_alpha =
+      options["advection_limit_alpha"]
+          .doc("Limit perpendicular advection fluxes to fraction of thermal speed. <0 means off.")
+          .withDefault(1.0);
+
+  conduction_limit_alpha = options["conduction_limit_alpha"]
+    .doc("Scale heat flux limiter")
+    .withDefault(1.0);
+
+  viscosity_limit_alpha = options["viscosity_limit_alpha"]
+    .doc("Scale momentum flux limiter")
+    .withDefault(1.0);
+
+  flux_limit_gamma =
+      options["flux_limit_gamma"]
+          .doc("Sharpness of flux limiter. 1 is very loose, 2 loose and 5 reasonably tight")
+          .withDefault(2);
+
+  override_limiter = options["override_limiter"]
+                     .doc("Force conduction and viscosity limiters to use the advection limiter?")
+                     .withDefault<bool>(false);
 
   maximum_mfp =
       options["maximum_mfp"]
@@ -199,6 +221,8 @@ void NeutralMixed::transform(Options& state) {
 
   Pnlim = floor(Pn, pn_floor);
   Pnlim.applyBoundary();
+
+  Tnlim = Pnlim / Nnlim;
 
   /////////////////////////////////////////////////////
   // Parallel boundary conditions
@@ -355,41 +379,17 @@ void NeutralMixed::finally(const Options& state) {
       nu += GET_VALUE(Field3D, localstate["collision_frequencies"][collision_name]);
     }
 
-
     // Dnn = Vth^2 / sigma
     // This thermal speed is isotropic, so sqrt(T/m)
-    Dnn_unlimited = (Tn / AA) / (nu + mfp_pseudo_nu);
+    Dnn = (Tn / AA) / (nu + mfp_pseudo_nu);
   } else {
-    Dnn_unlimited = (Tn / AA) / mfp_pseudo_nu;
-  }
-
-  Dnn = 0;
-
-  gradlogP = abs(Grad(logPnlim));
-  gradperplogP = abs(Grad_perp(logPnlim));
-
-
-
-  if (flux_limit > 0.0) {
-    // Apply flux limit to diffusion,
-    // using the local thermal speed and pressure gradient magnitude
-
-    if (legacy_vth_limiter) {
-      vth = sqrt(Tn / AA);
-    } else {
-      vth = 0.25 * sqrt((8 * Tn) / (PI * AA));
-    }
-
-    Dmax = flux_limit * vth / (abs(Grad_perp(logPnlim)) + 1. / maximum_mfp);
-
-
-    BOUT_FOR(i, Dmax.getRegion("RGN_NOBNDRY")) { Dnn[i] = BOUTMIN(Dnn_unlimited[i], Dmax[i]); }
+    Dnn = (Tn / AA) / mfp_pseudo_nu;
   }
 
   if (diffusion_limit > 0.0) {
     // Impose an upper limit on the diffusion coefficient
-    BOUT_FOR(i, Dnn_unlimited.getRegion("RGN_NOBNDRY")) {
-      Dnn[i] = BOUTMIN(Dnn_unlimited[i], diffusion_limit);
+    BOUT_FOR(i, Dnn.getRegion("RGN_NOBNDRY")) {
+      Dnn[i] = BOUTMIN(Dnn[i], diffusion_limit);
     }
   }
 
@@ -405,6 +405,76 @@ void NeutralMixed::finally(const Options& state) {
   DnnPn.applyBoundary();
   DnnNn.applyBoundary();
   DnnNVn.applyBoundary();
+
+  // Heat conductivity 
+  // Note: This is kappa_n = (5/2) * Pn / (m * nu)
+  //       where nu is the collision frequency used in Dnn
+  kappa_n = (5. / 2) * DnnNn;
+
+  // Viscosity
+  // Relationship between heat conduction and viscosity for neutral
+  // gas Chapman, Cowling "The Mathematical Theory of Non-Uniform
+  // Gases", CUP 1952 Ferziger, Kaper "Mathematical Theory of
+  // Transport Processes in Gases", 1972
+  // eta_n = (2. / 5) * m_n * kappa_n;
+  //
+  eta_n = AA * (5. / 2) * kappa_n;
+
+  // These are for debugging only
+  gradlogP = abs(Grad(logPnlim));
+  gradperplogP = abs(Grad_perp(logPnlim));
+
+  if (legacy_vth_limiter) {
+    vth = sqrt(Tn / AA);
+  } else {
+    vth = 0.25 * sqrt((8 * Tn) / (PI * AA));
+  }
+
+  //// Calculate flux limiting factors for perpendicular transport only
+  advection_factor = 1;
+  conduction_factor = 1;
+  viscosity_factor = 1;
+
+  // Advection (of particles, pressure, momentum)
+  if (advection_limit_alpha > 0.0) {
+    Vector3D v_perp = -Dnn * Grad_perp(logPnlim);     // vector of perp velocity
+    Field3D v_abs = sqrt(v_perp * v_perp);            // magintude: |v dot v|
+    Field3D advection_flux_abs = Nnlim * v_abs;
+    Field3D advection_limit = Nnlim * vth;          
+    advection_factor = pow(1. + pow(advection_flux_abs / (advection_limit_alpha * advection_limit),
+                                          flux_limit_gamma),-1./flux_limit_gamma);
+  } else {
+    advection_factor = 1;
+  }
+
+  // Conduction
+  if (conduction_limit_alpha > 0.0 and neutral_conduction) {
+    Vector3D heat_flux = -kappa_n * Grad_perp(Tn);  
+    Field3D heat_flux_abs = sqrt(heat_flux * heat_flux);
+    Field3D heat_limit = Pnlim * sqrt((2*Tnlim) / (PI*AA));  // 1D heat flux of 3D maxwellian (Stangeby)          
+    conduction_factor = pow(1. + pow(heat_flux_abs / (conduction_limit_alpha * heat_limit),
+                                          flux_limit_gamma),-1./flux_limit_gamma);
+  } else {
+    conduction_factor = 1;
+  }
+
+  // Viscosity
+  if (viscosity_limit_alpha > 0.0 and neutral_viscosity) {
+    Vector3D momentum_flux = -eta_n * Grad_perp(Vn);     
+    Field3D momentum_flux_abs = sqrt(momentum_flux * momentum_flux);
+    Field3D momentum_limit = Pnlim;    // Can't have more dynamic pressure than there is static pressure
+    viscosity_factor = pow(1. + pow(momentum_flux_abs / (viscosity_limit_alpha * momentum_limit),
+                                          flux_limit_gamma),-1./flux_limit_gamma);
+  } else {
+    viscosity_factor = 1;
+  }
+
+  if (override_limiter) {
+    conduction_factor = advection_factor;
+    viscosity_factor = advection_factor;
+  }
+
+  
 
   if (sheath_ydown) {
     for (RangeIterator r = mesh->iterateBndryLowerY(); !r.isDone(); r++) {
@@ -434,25 +504,13 @@ void NeutralMixed::finally(const Options& state) {
     sound_speed = sqrt(Tn * (5. / 3) / AA);
   }
 
-  // Heat conductivity 
-  // Note: This is kappa_n = (5/2) * Pn / (m * nu)
-  //       where nu is the collision frequency used in Dnn
-  kappa_n = (5. / 2) * DnnNn;
 
-  // Viscosity
-  // Relationship between heat conduction and viscosity for neutral
-  // gas Chapman, Cowling "The Mathematical Theory of Non-Uniform
-  // Gases", CUP 1952 Ferziger, Kaper "Mathematical Theory of
-  // Transport Processes in Gases", 1972
-  // eta_n = (2. / 5) * m_n * kappa_n;
-  //
-  eta_n = AA * (5. / 2) * kappa_n;
 
   /////////////////////////////////////////////////////
   // Neutral density
   TRACE("Neutral density");
 
-  perp_nn_adv_src = Div_a_Grad_perp_upwind_flows(DnnNn, logPnlim,       // Perpendicular advection
+  perp_nn_adv_src = Div_a_Grad_perp_upwind_flows(DnnNn * advection_factor, logPnlim,       // Perpendicular advection
                                    particle_flow_xlow,
                                    particle_flow_ylow);                 
 
@@ -476,18 +534,18 @@ void NeutralMixed::finally(const Options& state) {
   ddt(Pn) = 
     - FV::Div_par_mod<ParLimiter>(Pn, Vn, sound_speed)                  // Parallel advection
     - (2. / 3) * Pn * Div_par(Vn)                                       // Parallel compression
-    + Div_a_Grad_perp_upwind_flows((5. / 3) * DnnPn, logPnlim,          // Perpendicular advection
-                                   energy_flow_xlow, energy_flow_ylow)  
+    + Div_a_Grad_perp_upwind_flows(
+          (5. / 3) * DnnPn * advection_factor, logPnlim,            // Perpendicular advection
+          energy_flow_xlow, energy_flow_ylow)  
      ;
   energy_flow_xlow *= 3/2; // Note: Should this be 5/2?
   energy_flow_ylow *= 3/2;
 
-  
 
   if (neutral_conduction) {
     ddt(Pn) += 
-      (2. / 3) * Div_a_Grad_perp_upwind(DnnNn, Tn)                      // Perpendicular conduction
-      + FV::Div_par_K_Grad_par(kappa_n, Tn)                             // Parallel conduction
+      (2. / 3) * Div_a_Grad_perp_upwind(DnnNn * conduction_factor, Tn)                      // Perpendicular conduction
+      + FV::Div_par_K_Grad_par(kappa_n * conduction_factor, Tn)                             // Parallel conduction
       ;
   }
   
@@ -507,17 +565,18 @@ void NeutralMixed::finally(const Options& state) {
     ddt(NVn) =
         -AA * FV::Div_par_fvv<ParLimiter>(Nnlim, Vn, sound_speed)       // Parallel advection
         - Grad_par(Pn)                                                  // Pressure gradient
-      + Div_a_Grad_perp_upwind_flows(DnnNVn, logPnlim,                  // Perpendicular advection
-                                     momentum_flow_xlow,
-                                     momentum_flow_ylow) 
+      + Div_a_Grad_perp_upwind_flows(
+            DnnNVn * advection_factor, logPnlim,                    // Perpendicular advection
+            momentum_flow_xlow,
+            momentum_flow_ylow) 
       ;
 
     if (neutral_viscosity) {
       // NOTE: The following viscosity terms are not (yet) balanced
       //       by a viscous heating term
 
-      Field3D momentum_source = FV::Div_a_Grad_perp(eta_n, Vn)          // Perpendicular viscosity
-              + FV::Div_par_K_Grad_par(eta_n, Vn)                       // Parallel viscosity
+      Field3D momentum_source = FV::Div_a_Grad_perp(eta_n * viscosity_factor, Vn)  // Perpendicular viscosity
+              + FV::Div_par_K_Grad_par(eta_n * viscosity_factor, Vn)               // Parallel viscosity
       ;
 
       ddt(NVn) += momentum_source; // Viscosity
@@ -635,20 +694,6 @@ void NeutralMixed::outputVars(Options& state) {
                     {"standard_name", "diffusion coefficient"},
                     {"long_name", name + " diffusion coefficient"},
                     {"source", "neutral_mixed"}});
-    set_with_attrs(state[std::string("Dnn_unlim") + name], Dnn_unlimited,
-                   {{"time_dimension", "t"},
-                    {"units", "m^2/s"},
-                    {"conversion", Cs0 * Cs0 / Omega_ci},
-                    {"standard_name", "unlimited diffusion coefficient"},
-                    {"long_name", name + " unlimited diffusion coefficient"},
-                    {"source", "neutral_mixed"}});
-    set_with_attrs(state[std::string("Dmax_") + name], Dmax,
-                   {{"time_dimension", "t"},
-                    {"units", "m^2/s"},
-                    {"conversion", Cs0 * Cs0 / Omega_ci},
-                    {"standard_name", "max diffusion coefficient"},
-                    {"long_name", name + " max diffusion coefficient"},
-                    {"source", "neutral_mixed"}});
     set_with_attrs(state[std::string("gradlogP_") + name], gradlogP,
                    {{"time_dimension", "t"},
                     {"units", "m^-1"},
@@ -662,6 +707,30 @@ void NeutralMixed::outputVars(Options& state) {
                     {"conversion", 1 / rho_s0},
                     {"standard_name", "inv. P perp gradient length scale"},
                     {"long_name", name + " inv. P perp gradient length scale"},
+                    {"source", "neutral_mixed"}});
+    set_with_attrs(state[std::string("advection_factor_") + name], advection_factor,
+                   {{"time_dimension", "t"},
+                    {"units", ""},
+                    {"conversion", 1.0},
+                    {"standard_name", "flux factor"},
+                    {"long_name", name + " particle flux factor"},
+                    {"species", name},
+                    {"source", "neutral_mixed"}});
+    set_with_attrs(state[std::string("conduction_factor_") + name], conduction_factor,
+                   {{"time_dimension", "t"},
+                    {"units", ""},
+                    {"conversion", 1.0},
+                    {"standard_name", "flux factor"},
+                    {"long_name", name + " conduction_factor"},
+                    {"species", name},
+                    {"source", "neutral_mixed"}});
+    set_with_attrs(state[std::string("viscosity_factor_") + name], viscosity_factor,
+                   {{"time_dimension", "t"},
+                    {"units", ""},
+                    {"conversion", 1.0},
+                    {"standard_name", "flux factor"},
+                    {"long_name", name + " viscosity_factor"},
+                    {"species", name},
                     {"source", "neutral_mixed"}});
     set_with_attrs(state[std::string("SN") + name], Sn,
                    {{"time_dimension", "t"},

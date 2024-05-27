@@ -59,6 +59,11 @@ private:
   BoutReal maximum_mfp;   ///< Reduce diffusion using physical MFP limit
   Field3D vth;   ///< Thermal speed to use in flux limiter
   bool legacy_vth_limiter;
+  bool override_limiter;   // Force conduction and viscosity limiters to use the advection limiter?
+  // Limit perpendicular advection fluxes to fraction of thermal speed.
+  BoutReal advection_limit_alpha, conduction_limit_alpha, viscosity_limit_alpha;  // Limiters
+  BoutReal flux_limit_gamma;   ///< Sharpness of perpendicular flux limitation. Usually 1 or 2
+  Field3D advection_factor, conduction_factor, viscosity_factor;   // Multiplier to achieve limit
 
   bool neutral_viscosity; ///< include viscosity?
   bool neutral_conduction; ///< Include heat conduction?
