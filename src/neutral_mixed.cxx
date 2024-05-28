@@ -569,14 +569,17 @@ void NeutralMixed::finally(const Options& state) {
 
   if (neutral_conduction) {
     ddt(Pn) += 
-      (2. / 3) * Div_a_Grad_perp_upwind(kappa_n * conduction_factor, Tn)                      // Perpendicular conduction
+      (2. / 3) * Div_a_Grad_perp_upwind_flows(kappa_n * conduction_factor, Tn,
+                            conduction_flow_xlow, conduction_flow_ylow)                      // Perpendicular conduction
       + FV::Div_par_K_Grad_par(kappa_n * conduction_factor, Tn)                             // Parallel conduction
       ;
-  }
 
     // The factor here is likely 3/2 as this is pure energy flow, but needs checking.
-  conduction_flow_xlow *= 3/2;
-  conduction_flow_ylow *= 3/2;
+    conduction_flow_xlow *= 3/2;
+    conduction_flow_ylow *= 3/2;
+  }
+
+  
   
   Sp = pressure_source;
   if (localstate.isSet("energy_source")) {
