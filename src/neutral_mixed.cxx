@@ -399,7 +399,7 @@ void NeutralMixed::finally(const Options& state) {
   // Legacy flux limiter: limit Dn upstream
   Dnn = 0;
   if (legacy_limiter) {
-    Dmax = flux_limit * vth / (abs(Grad_perp(logPnlim)) + 1. / maximum_mfp);
+    Dmax = advection_limit_alpha * vth / (abs(Grad_perp(logPnlim)) + 1. / maximum_mfp);
     BOUT_FOR(i, Dmax.getRegion("RGN_NOBNDRY")) { Dnn[i] = BOUTMIN(Dnn_unlimited[i], Dmax[i]); }
   } else {
     Dmax = Dnn_unlimited;
