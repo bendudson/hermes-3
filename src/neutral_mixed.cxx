@@ -438,7 +438,7 @@ void NeutralMixed::finally(const Options& state) {
   // Transport Processes in Gases", 1972
   // eta_n = (2. / 5) * m_n * kappa_n;
   //
-  eta_n = AA * (5. / 2) * kappa_n;
+  eta_n = AA * (2. / 5) * kappa_n;
 
   // These are for debugging only
   gradlogP = abs(Grad(logPnlim));
@@ -558,19 +558,25 @@ void NeutralMixed::finally(const Options& state) {
     - FV::Div_par_mod<ParLimiter>(Pn, Vn, sound_speed)                  // Parallel advection
     - (2. / 3) * Pn * Div_par(Vn)                                       // Parallel compression
     + Div_a_Grad_perp_upwind_flows(
-          (5. / 3) * DnnPn * advection_factor, logPnlim,            // Perpendicular advection
+          (5. / 3) * DnnPn * advection_factor, logPnlim,                // Perpendicular advection
           energy_flow_xlow, energy_flow_ylow)  
      ;
-  energy_flow_xlow *= 3/2; // Note: Should this be 5/2?
-  energy_flow_ylow *= 3/2;
+  // The factor here is likely 5/2 as we're advecting internal energy and pressure.
+  // Doing this still leaves a heat imbalance factor of 0.11 in the cells, but better than 0.33 with 3/2.
+  energy_flow_xlow *= 5/2; 
+  energy_flow_ylow *= 5/2;
 
 
   if (neutral_conduction) {
     ddt(Pn) += 
-      (2. / 3) * Div_a_Grad_perp_upwind(DnnNn * conduction_factor, Tn)                      // Perpendicular conduction
+      (2. / 3) * Div_a_Grad_perp_upwind(kappa_n * conduction_factor, Tn)                      // Perpendicular conduction
       + FV::Div_par_K_Grad_par(kappa_n * conduction_factor, Tn)                             // Parallel conduction
       ;
   }
+
+    // The factor here is likely 3/2 as this is pure energy flow, but needs checking.
+  conduction_flow_xlow *= 3/2;
+  conduction_flow_ylow *= 3/2;
   
   Sp = pressure_source;
   if (localstate.isSet("energy_source")) {
@@ -880,6 +886,26 @@ void NeutralMixed::outputVars(Options& state) {
                     {"conversion", rho_s0 * SQ(rho_s0) * Pnorm * Omega_ci},
                     {"standard_name", "power"},
                     {"long_name", name + " power through Y cell face. Note: May be incomplete."},
+                    {"species", name},
+                    {"source", "evolve_pressure"}});
+    }
+    if (conduction_flow_xlow.isAllocated()) {
+      set_with_attrs(state[std::string("ConductionFlow_") + name + std::string("_xlow")],conduction_flow_xlow,
+                   {{"time_dimension", "t"},
+                    {"units", "W"},
+                    {"conversion", rho_s0 * SQ(rho_s0) * Pnorm * Omega_ci},
+                    {"standard_name", "power"},
+                    {"long_name", name + " conducted power through X cell face. Note: May be incomplete."},
+                    {"species", name},
+                    {"source", "evolve_pressure"}});
+    }
+    if (conduction_flow_ylow.isAllocated()) {
+      set_with_attrs(state[std::string("ConductionFlow_") + name + std::string("_ylow")], conduction_flow_ylow,
+                   {{"time_dimension", "t"},
+                    {"units", "W"},
+                    {"conversion", rho_s0 * SQ(rho_s0) * Pnorm * Omega_ci},
+                    {"standard_name", "power"},
+                    {"long_name", name + " conducted power through Y cell face. Note: May be incomplete."},
                     {"species", name},
                     {"source", "evolve_pressure"}});
     }
