@@ -44,7 +44,7 @@ private:
   Field3D Dnn, Dnn_unlimited; ///< Diffusion coefficient
   Field3D DnnNn, DnnPn, DnnNVn;
   Field3D Dmax;
-  Field3D gradlogP, gradperplogP;
+  Field3D gradlogP, gradperplogP, gradperpT;
   Field3D nu; ///< Collisionality to use for diffusion
   std::vector<std::string> collision_names; ///< Collisions used for collisionality
   std::string diffusion_collisions_mode;  ///< Collision selection, either afn or legacy
@@ -66,6 +66,7 @@ private:
   BoutReal advection_limit_alpha, conduction_limit_alpha, viscosity_limit_alpha;  // Limiters
   BoutReal flux_limit_gamma;   ///< Sharpness of perpendicular flux limitation. Usually 1 or 2
   Field3D advection_factor, conduction_factor, viscosity_factor;   // Multiplier to achieve limit
+  Field3D advection_flux_abs, advection_limit;
 
   bool neutral_viscosity; ///< include viscosity?
   bool neutral_conduction; ///< Include heat conduction?

@@ -454,8 +454,8 @@ void NeutralMixed::finally(const Options& state) {
   if (advection_limit_alpha > 0.0) {
     Vector3D v_perp = -Dnn * Grad_perp(logPnlim);     // vector of perp velocity
     Field3D v_abs = sqrt(v_perp * v_perp);            // magintude: |v dot v|
-    Field3D advection_flux_abs = Nnlim * v_abs;
-    Field3D advection_limit = Nnlim * vth;          
+    advection_flux_abs = Nnlim * v_abs;
+    advection_limit = Nnlim * vth;          
     advection_factor = pow(1. + pow(advection_flux_abs / (advection_limit_alpha * advection_limit),
                                           flux_limit_gamma),-1./flux_limit_gamma);
   } else {
@@ -566,6 +566,7 @@ void NeutralMixed::finally(const Options& state) {
   energy_flow_xlow *= 5/2; 
   energy_flow_ylow *= 5/2;
 
+  gradperpT = sqrt(Grad_perp(Tn) * Grad_perp(Tn));
 
   if (neutral_conduction) {
     ddt(Pn) += 
@@ -740,6 +741,20 @@ void NeutralMixed::outputVars(Options& state) {
                     {"standard_name", "max diffusion coefficient"},
                     {"long_name", name + " max diffusion coefficient"},
                     {"source", "neutral_mixed"}});
+    set_with_attrs(state[std::string("kappa_") + name], kappa_n,
+                   {{"time_dimension", "t"},
+                    {"units", "m^2/s"},
+                    {"conversion", Cs0 * Cs0 / Omega_ci},
+                    {"standard_name", "conduction coefficient"},
+                    {"long_name", name + " conduction coefficient"},
+                    {"source", "neutral_mixed"}});
+    set_with_attrs(state[std::string("DnnNn_") + name], DnnNn,
+                   {{"time_dimension", "t"},
+                    {"units", "m^2/s"},
+                    {"conversion", Cs0 * Cs0 / Omega_ci * Nnorm},
+                    {"standard_name", ""},
+                    {"long_name", ""},
+                    {"source", "neutral_mixed"}});
     set_with_attrs(state[std::string("gradlogP_") + name], gradlogP,
                    {{"time_dimension", "t"},
                     {"units", "m^-1"},
@@ -754,6 +769,13 @@ void NeutralMixed::outputVars(Options& state) {
                     {"standard_name", "inv. P perp gradient length scale"},
                     {"long_name", name + " inv. P perp gradient length scale"},
                     {"source", "neutral_mixed"}});
+    set_with_attrs(state[std::string("gradperpT") + name], gradperpT,
+                   {{"time_dimension", "t"},
+                    {"units", "m^-1"},
+                    {"conversion", 1 / rho_s0},
+                    {"standard_name", "inv. T perp gradient length scale"},
+                    {"long_name", name + " inv. T perp gradient length scale"},
+                    {"source", "neutral_mixed"}});
     set_with_attrs(state[std::string("advection_factor_") + name], advection_factor,
                    {{"time_dimension", "t"},
                     {"units", ""},
@@ -761,6 +783,30 @@ void NeutralMixed::outputVars(Options& state) {
                     {"standard_name", "flux factor"},
                     {"long_name", name + " particle flux factor"},
                     {"species", name},
+                    {"source", "neutral_mixed"}});
+    set_with_attrs(state[std::string("vth_") + name], vth,
+                   {{"time_dimension", "t"},
+                    {"units", "m / s"},
+                    {"conversion", Cs0},
+                    {"standard_name", "thermal speed"},
+                    {"long_name", name + " thermal speed"},
+                    {"species", name},
+                    {"source", "neutral_mixed"}});
+    set_with_attrs(state[std::string("advection_flux_abs_") + name], advection_flux_abs,
+                   {{"time_dimension", "t"},
+                    {"units", "m^-2 s^-1"},
+                    {"conversion", Nnorm * Cs0},
+                    {"standard_name", ""},
+                    {"long_name", ""},
+                    {"species", ""},
+                    {"source", "neutral_mixed"}});
+    set_with_attrs(state[std::string("advection_limit_") + name], advection_limit,
+                   {{"time_dimension", "t"},
+                    {"units", "m^-2 s^-1"},
+                    {"conversion", Nnorm * Cs0},
+                    {"standard_name", ""},
+                    {"long_name", ""},
+                    {"species", ""},
                     {"source", "neutral_mixed"}});
     set_with_attrs(state[std::string("conduction_factor_") + name], conduction_factor,
                    {{"time_dimension", "t"},
