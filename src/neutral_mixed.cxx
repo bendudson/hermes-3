@@ -102,6 +102,10 @@ NeutralMixed::NeutralMixed(const std::string& name, Options& alloptions, Solver*
                      .doc("Use old form of the flux limiter?")
                      .withDefault<bool>(false);
 
+  legacy_separate_conduction = options["legacy_separate_conduction"]
+                     .doc("Feature separate conduction limiter when legacy form enabled? Requires legacy_limiter=True.")
+                     .withDefault<bool>(false);
+
   maximum_mfp =
       options["maximum_mfp"]
           .doc("Add a pseudo-collisionality representing physical MFP limit to pressure diffusion model")
@@ -429,7 +433,25 @@ void NeutralMixed::finally(const Options& state) {
   // Heat conductivity 
   // Note: This is kappa_n = (5/2) * Pn / (m * nu)
   //       where nu is the collision frequency used in Dnn
-  kappa_n = (5. / 2) * DnnNn;
+
+  // Implement separate conduction limiter by limiting Kappa
+  // Just like the legacy limiters limit D.
+  // Note that kappa is always calculated using unlimited D.
+  
+  if (legacy_limiter and legacy_separate_conduction) {
+    Field3D DnnNn_unlimited = Dnn_unlimited * Nnlim;
+    DnnNn_unlimited.applyBoundary("dirichlet");    // TODO: is this correct?
+    kappa_n = (5. / 2) * DnnNn_unlimited;
+
+    Field3D cond_vel = Pnlim * sqrt((2*Tnlim) / (PI*AA));  // 1D heat flux of 3D maxwellian (Stangeby)  
+    Field3D kappamax = conduction_limit_alpha * cond_vel / (abs(Grad_perp(Tn)) + 1. / maximum_mfp);
+    BOUT_FOR(i, kappamax.getRegion("RGN_NOBNDRY")) { kappa_n[i] = BOUTMIN(kappa_n[i], kappamax[i]); }
+
+  } else {
+    kappa_n = (5. / 2) * DnnNn;
+
+  }
+    
 
   // Viscosity
   // Relationship between heat conduction and viscosity for neutral
@@ -438,7 +460,8 @@ void NeutralMixed::finally(const Options& state) {
   // Transport Processes in Gases", 1972
   // eta_n = (2. / 5) * m_n * kappa_n;
   //
-  eta_n = AA * (2. / 5) * kappa_n;
+  Field3D kappa_n_Dnchained = (5. / 2) * DnnNn;   // Include only limited D, not also limited kappa
+  eta_n = AA * (2. / 5) * kappa_n_Dnchained;
 
   // These are for debugging only
   gradlogP = abs(Grad(logPnlim));
@@ -484,7 +507,7 @@ void NeutralMixed::finally(const Options& state) {
     viscosity_factor = 1;
   }
 
-  // Force conduction/viscosity to use advection limiter like before
+  // Force conduction/viscosity to use advection limiter
   if (override_limiter) {
     conduction_factor = advection_factor;
     viscosity_factor = advection_factor;
