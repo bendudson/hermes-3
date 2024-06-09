@@ -437,19 +437,20 @@ void NeutralMixed::finally(const Options& state) {
   // Implement separate conduction limiter by limiting Kappa
   // Just like the legacy limiters limit D.
   // Note that kappa is always calculated using unlimited D.
+
+  Field3D DnnNn_unlimited = Dnn_unlimited * Nnlim;
+  DnnNn_unlimited.applyBoundary("dirichlet");    // TODO: is this correct?
+  kappa_n_unlimited = (5. / 2) * DnnNn_unlimited;
+  kappa_n_Dnchained = (5. / 2) * DnnNn;   // Include only limited D, not also limited kappa
   
   if (legacy_limiter and legacy_separate_conduction) {
-    Field3D DnnNn_unlimited = Dnn_unlimited * Nnlim;
-    DnnNn_unlimited.applyBoundary("dirichlet");    // TODO: is this correct?
-    kappa_n = (5. / 2) * DnnNn_unlimited;
-
     Field3D cond_vel = Pnlim * sqrt((2*Tnlim) / (PI*AA));  // 1D heat flux of 3D maxwellian (Stangeby)  
-    Field3D kappamax = conduction_limit_alpha * cond_vel / (abs(Grad_perp(Tn)) + 1. / maximum_mfp);
-    BOUT_FOR(i, kappamax.getRegion("RGN_NOBNDRY")) { kappa_n[i] = BOUTMIN(kappa_n[i], kappamax[i]); }
+    kappa_n_max = conduction_limit_alpha * cond_vel / (abs(Grad_perp(Tn)) + 1. / maximum_mfp);
+    BOUT_FOR(i, kappa_n_max.getRegion("RGN_NOBNDRY")) { kappa_n[i] = BOUTMIN(kappa_n_unlimited[i], kappa_n_max[i]); }
 
   } else {
     kappa_n = (5. / 2) * DnnNn;
-
+    kappa_n_max = 0;
   }
     
 
@@ -460,7 +461,6 @@ void NeutralMixed::finally(const Options& state) {
   // Transport Processes in Gases", 1972
   // eta_n = (2. / 5) * m_n * kappa_n;
   //
-  Field3D kappa_n_Dnchained = (5. / 2) * DnnNn;   // Include only limited D, not also limited kappa
   eta_n = AA * (2. / 5) * kappa_n_Dnchained;
 
   // These are for debugging only

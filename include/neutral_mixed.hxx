@@ -74,6 +74,7 @@ private:
   bool evolve_momentum; ///< Evolve parallel momentum?
   
   Field3D kappa_n, eta_n; ///< Neutral conduction and viscosity
+  Field3D kappa_n_unlimited, kappa_n_Dnchained, kappa_n_max;
 
   bool precondition {true}; ///< Enable preconditioner?
   bool lax_flux; ///< Use Lax flux for advection terms
