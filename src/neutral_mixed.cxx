@@ -445,6 +445,7 @@ void NeutralMixed::finally(const Options& state) {
   
   if (legacy_limiter and legacy_separate_conduction) {
     Field3D cond_vel = Pnlim * sqrt((2*Tnlim) / (PI*AA));  // 1D heat flux of 3D maxwellian (Stangeby)  
+    kappa_n = kappa_n_unlimited;
     kappa_n_max = conduction_limit_alpha * cond_vel / (abs(Grad_perp(Tn)) + 1. / maximum_mfp);
     BOUT_FOR(i, kappa_n_max.getRegion("RGN_NOBNDRY")) { kappa_n[i] = BOUTMIN(kappa_n_unlimited[i], kappa_n_max[i]); }
 
