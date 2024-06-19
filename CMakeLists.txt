@@ -95,6 +95,7 @@ set(HERMES_SOURCES
     src/solkit_hydrogen_charge_exchange.cxx
     src/upstream_density_feedback.cxx
     src/temperature_feedback.cxx
+    src/detachment_controller.cxx
     src/thermal_force.cxx
     src/ion_viscosity.cxx
     src/transform.cxx
@@ -153,10 +154,12 @@ set(HERMES_SOURCES
     include/thermal_force.hxx
     include/upstream_density_feedback.hxx
     include/temperature_feedback.hxx
+    include/detachment_controller.hxx
     include/vorticity.hxx
     include/zero_current.hxx
     include/transform.hxx
     include/fixed_fraction_radiation.hxx
+    include/simple_pump.hxx
     )
 
 # Compile Hermes sources into a library, which can be used for unit tests
@@ -223,6 +226,7 @@ if(HERMES_TESTS)
   hermes_add_integrated_test(sod-shock)
   hermes_add_integrated_test(sod-shock-energy)
   hermes_add_integrated_test(drift-wave)
+  hermes_add_integrated_test(alfven-wave)
 
   # Unit tests
   option(HERMES_UNIT_TESTS "Build the unit tests" ON)
@@ -263,5 +267,8 @@ endif()
 configure_file(include/hermes_build_config.hxx.in include/hermes_build_config.hxx)
 
 # Installation
-
-install(TARGETS hermes-3)
+if (BUILD_SHARED_LIBS)
+  install(TARGETS hermes-3 hermes-3-lib)
+else()
+  install(TARGETS hermes-3)
+endif()
