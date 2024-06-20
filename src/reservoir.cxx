@@ -140,14 +140,7 @@ void Reservoir::transform(Options& state) {
   // When flow is reversed and these become sources, the new particles have
   // the same pressure and momentum as the local particles.
 
-  // Iterate over the cells where location_div_sol > 0
-  output<<std::string("\n\n****************************************************\n");
-  
-  
-
   BOUT_FOR(i, N.getRegion("RGN_NOBNDRY")) {
-
-    output << lpar[i];
 
     // Main SOL reservoir
     //////////////////////////////////////////
@@ -164,7 +157,6 @@ void Reservoir::transform(Options& state) {
       energy_source_main_sol[i]   += (3. / 2) * Prate;
       momentum_source_main_sol[i] += NVrate;
       location_main_sol[i] = 1;
-      output << std::string(" FOUND MAIN SOL");
     }
 
     // Divertor SOL reservoir
@@ -200,12 +192,9 @@ void Reservoir::transform(Options& state) {
       momentum_source_div_pfr[i] += NVrate;
       location_div_pfr[i] = 1;
     }
-    output << location_main_sol[i];
-    output << std::string("\n");
     
 
   }
-  output<<std::string("\n****************************************************\n\n");
 
   add(species["density_source"], density_source_main_sol + density_source_div_sol + density_source_div_pfr);
   add(species["energy_source"], energy_source_main_sol + energy_source_div_sol + energy_source_div_pfr);
