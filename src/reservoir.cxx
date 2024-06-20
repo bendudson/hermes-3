@@ -51,32 +51,32 @@ Reservoir::Reservoir(std::string name, Options& alloptions, Solver*) : name(name
           .withDefault<BoutReal>(xpoint_position);
 
 
-  // Get ypos
+  // Get lpar
   const int MYPE = BoutComm::rank();   // Current rank
   const int NPES = BoutComm::size();    // Number of procs
   const int NYPE = NPES / mesh->NXPE;    // Number of procs in Y
   Coordinates *coord = mesh->getCoordinates();
 
-  ypos = 0;
+  lpar = 0;
   BoutReal offset = 0;   // Offset to ensure ylow domain boundary starts at 0
   auto dy = coord->dy;
 
-  ypos(0,0,0) = 0.5 * dy(0,0,0);
+  lpar(0,0,0) = 0.5 * dy(0,0,0);
   for (int id = 0; id <= NYPE-1; ++id) {   // Iterate through each proc
     for (int j = 0; j <= mesh->LocalNy; ++j) {
           if (j > 0) {
-            ypos(0, j, 0) = ypos(0, j-1, 0) + 0.5 * dy(0, j-1, 0) + 0.5 * dy(0, j, 0);
+            lpar(0, j, 0) = lpar(0, j-1, 0) + 0.5 * dy(0, j-1, 0) + 0.5 * dy(0, j, 0);
           }
     }
-    mesh->communicate(ypos);  // Communicate across guard cells so other procs keep counting
+    mesh->communicate(lpar);  // Communicate across guard cells so other procs keep counting
     
     if (MYPE == 0) {
-      offset = (ypos(0,1,0) + ypos(0,2,0)) / 2;  // Offset lives on first proc
+      offset = (lpar(0,1,0) + lpar(0,2,0)) / 2;  // Offset lives on first proc
     }
   }
 
   MPI_Bcast(&offset, 1, MPI_DOUBLE, 0, BoutComm::get());  // Ensure all procs get offset
-  ypos -= offset;
+  lpar -= offset;
 
   // Find every cell that has reservoir_location > 0
   // so we can efficiently iterate over them later
@@ -177,7 +177,7 @@ void Reservoir::outputVars(Options& state) {
 
     
     set_with_attrs(    // Doesn't need unnormalising for some reason
-          state[std::string("ypos")], ypos,
+          state[std::string("lpar")], lpar,
           {{"units", "m"},
           {"standard_name", "Parallel distance from midplane"},
           {"long_name", "Parallel distance from midplane"},

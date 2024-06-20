@@ -50,7 +50,7 @@ private:
   Region<Ind3D> reservoir_region;
 
   Field3D density_source, energy_source, momentum_source;
-  Field3D ypos;   // Parallel connection length, 0 at midplane edge
+  Field3D lpar;   // Parallel connection length, 0 at midplane edge
 };
 
 namespace {
