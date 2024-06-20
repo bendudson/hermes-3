@@ -95,6 +95,7 @@ set(HERMES_SOURCES
     src/upstream_density_feedback.cxx
     src/temperature_feedback.cxx
     src/detachment_controller.cxx
+    src/fieldline_geometry.cxx
     src/thermal_force.cxx
     src/ion_viscosity.cxx
     src/transform.cxx
