@@ -14,11 +14,13 @@ FieldlineGeometry::FieldlineGeometry(std::string, Options& options, Solver*) {
     const auto& units = options["units"];
     Lnorm = get<BoutReal>(units["meters"]);
 
+    // Get lpar
     const int MYPE = BoutComm::rank();   // Current rank
     const int NPES = BoutComm::size();    // Number of procs
     const int NYPE = NPES / mesh->NXPE;    // Number of procs in Y
     Coordinates *coord = mesh->getCoordinates();
     lpar = 0;
+    BoutReal offset = 0;   // Offset to ensure ylow domain boundary starts at 0
     auto dy = coord->dy;
     lpar(0,0,0) = 0.5 * dy(0,0,0);
     for (int id = 0; id <= NYPE-1; ++id) {   // Iterate through each proc
@@ -27,8 +29,13 @@ FieldlineGeometry::FieldlineGeometry(std::string, Options& options, Solver*) {
                 lpar(0, j, 0) = lpar(0, j-1, 0) + 0.5 * dy(0, j-1, 0) + 0.5 * dy(0, j, 0);
             }
         }
-        mesh->communicate(lpar);  // When proc is done, communicate to other ones
+        mesh->communicate(lpar);  // Communicate across guard cells so other procs keep counting
+        if (MYPE == 0) {
+        offset = (lpar(0,1,0) + lpar(0,2,0)) / 2;  // Offset lives on first proc
+        }
     }
+    MPI_Bcast(&offset, 1, MPI_DOUBLE, 0, BoutComm::get());  // Ensure all procs get offset
+    lpar -= offset;
 
     auto str = geo_options["B_poloidal"]
       .doc("Function for B_poloidal(lpar) (for B_poloidal in [T] and lpar in [m]).")
