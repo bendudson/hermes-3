@@ -14,11 +14,6 @@ FieldlineGeometry::FieldlineGeometry(std::string, Options& options, Solver*) {
     const auto& units = options["units"];
     Lnorm = get<BoutReal>(units["meters"]);
 
-    // lpar = (geo_options["parallel_length"]
-    //     .doc("Parallel length as a function of grid index [m]")
-    //     .withDefault(Field3D(0.0))
-    // ) / Lnorm;
-
     const int MYPE = BoutComm::rank();   // Current rank
     const int NPES = BoutComm::size();    // Number of procs
     const int NYPE = NPES / mesh->NXPE;    // Number of procs in Y
@@ -36,12 +31,14 @@ FieldlineGeometry::FieldlineGeometry(std::string, Options& options, Solver*) {
     }
 
     auto str = geo_options["B_poloidal"]
-      .doc("Function for B_poloidal(lpar) [T].")
+      .doc("Function for B_poloidal(lpar) (for B_poloidal in [T] and lpar in [m]).")
       .as<std::string>();
     B_poloidal_function = FieldFactory::get()->parse(str, &geo_options);
 
-    for (int j = mesh->ystart; j <= mesh->yend; ++j) {
-        B_poloidal(0, j, 0) = B_poloidal_function ->generate(bout::generator::Context().set("lpar", lpar(0, j, 0)));
+    B_poloidal.allocate();
+
+    BOUT_FOR(i, B_poloidal.getRegion("RGN_ALL")) {
+        B_poloidal[i] = B_poloidal_function->generate(bout::generator::Context().set("lpar", lpar[i]));
     }
 
     diagnose = geo_options["diagnose"]
@@ -61,8 +58,13 @@ void FieldlineGeometry::outputVars(Options& state) {
         set_with_attrs(
             state[std::string("fieldline_geometry_parallel_length")], lpar,
             {{"units", "m"},
-            // {"conversion", Lnorm},
             {"long_name", "Parallel length"},
+            {"source", "fieldline_geometry"}});
+        
+        set_with_attrs(
+            state[std::string("fieldline_geometry_B_poloidal")], B_poloidal,
+            {{"units", "T"},
+            {"long_name", "B poloidal"},
             {"source", "fieldline_geometry"}});
 
 }}

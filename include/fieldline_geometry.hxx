@@ -16,9 +16,9 @@ struct FieldlineGeometry : public Component {
     BoutReal Lnorm;
     bool diagnose;
 
-    Field3D lpar;
+    Field3D lpar{0.0};
     FieldGeneratorPtr B_poloidal_function;
-    Field3D B_poloidal;
+    Field3D B_poloidal{0.0};
 
 };
 
