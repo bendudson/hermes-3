@@ -7,37 +7,25 @@
 
 struct FieldlineGeometry : public Component {
 
-  FieldlineGeometry(std::string name, Options& alloptions, Solver*) : name(name) {
+  FieldlineGeometry(std::string, Options& options, Solver*) {
 
-    Options& options = alloptions[name];
+    Options& geo_options = options["fieldline_geometry"];
 
-    const auto& units = alloptions["units"];
-    Nnorm = get<BoutReal>(units["inv_meters_cubed"]);
-    Omega_ci = 1.0 / get<BoutReal>(units["seconds"]);
+    const auto& units = options["units"];
+    Lnorm = get<BoutReal>(units["meters"]);
 
-    residence_time = (options["residence_time"]
-        .doc("Pumping time-constant. Units [s]")
-        .as<BoutReal>()
-    ) * Omega_ci;
+    parallel_length = (geo_options["parallel_length"]
+      .doc("Parallel length as a function of grid index [m]")
+      .withDefault(Field3D(0.0))
+    ) / Lnorm;
 
-    sink_shape = (options["sink_shape"]
-        .doc("Shape of pumping sink.")
-        .withDefault(Field3D(0.0))
-    );
-
-    diagnose = options["diagnose"]
+    diagnose = geo_options["diagnose"]
                   .doc("Output additional diagnostics?")
                   .withDefault<bool>(false);
 
     };
 
     void transform(Options& state) override {
-
-        Field3D species_density = getNoBoundary<Field3D>(state["species"][name]["density"]);
-
-        pumping_sink = (sink_shape * species_density) * (-1.0 / residence_time);
-
-        add(state["species"][name]["density_source"], pumping_sink);
 
     };
 
@@ -46,28 +34,32 @@ struct FieldlineGeometry : public Component {
     if (diagnose) {
 
       set_with_attrs(
-          state[std::string("fieldline_geometry_src_shape_" + name)], sink_shape,
-          {{"long_name", "simple pump source shape"},
+          state[std::string("fieldline_geometry_parallel_length")], parallel_length,
+          {{"units", "m"},
+           {"conversion", Lnorm},
+           {"long_name", "Parallel length"},
            {"source", "fieldline_geometry"}});
+
+      // set_with_attrs(
+      //     state[std::string("fieldline_geometry_src_shape_" + name)], sink_shape,
+      //     {{"long_name", "simple pump source shape"},
+      //      {"source", "fieldline_geometry"}});
     
-      set_with_attrs(
-          state[std::string("fieldline_geometry_sink_" + name)], pumping_sink,
-          {{"time_dimension", "t"},
-           {"units", "m^-3 / s"},
-           {"conversion", Nnorm * Omega_ci},
-           {"long_name", "simple pump source shape"},
-           {"source", "fieldline_geometry"}});
+      // set_with_attrs(
+      //     state[std::string("fieldline_geometry_sink_" + name)], pumping_sink,
+      //     {{"time_dimension", "t"},
+      //      {"units", "m^-3 / s"},
+      //      {"conversion", Nnorm * Omega_ci},
+      //      {"long_name", "simple pump source shape"},
+      //      {"source", "fieldline_geometry"}});
 
     }}
 
   private:
-    std::string name; ///< The species name
-    Field3D sink_shape;
-    Field3D pumping_sink;
-    BoutReal Nnorm;
-    BoutReal Omega_ci;
-    BoutReal residence_time;
+    BoutReal Lnorm;
     bool diagnose;
+
+    Field3D parallel_length;
 
 };
 
