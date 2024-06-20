@@ -42,15 +42,23 @@ struct Reservoir : public Component {
 private:
   std::string name;           ///< Short name of the species e.g. h+
   Field3D reservoir_location; ///< Indicates reservoir if >0
-  BoutReal reservoir_density, reservoir_timescale;
+  BoutReal density_div_sol, density_div_pfr, density_main_sol;
+  BoutReal velocity_factor_div_sol, velocity_factor_div_pfr, velocity_factor_main_sol;
+  Field3D location_div_sol, location_div_pfr, location_main_sol;
+
   bool diagnose, reservoir_sink_only;
   BoutReal baffle_position, xpoint_position;   // Parallel positions of reservoirs and xpoint
 
   /// Cell indices where reservoir_location > 0
-  Region<Ind3D> reservoir_region;
+  Region<Ind3D> region_div_sol;
 
   Field3D density_source, energy_source, momentum_source;
+  Field3D density_source_main_sol, energy_source_main_sol, momentum_source_main_sol;
+  Field3D density_source_div_sol, energy_source_div_sol, momentum_source_div_sol;
+  Field3D density_source_div_pfr, energy_source_div_pfr, momentum_source_div_pfr;
+
   Field3D lpar;   // Parallel connection length, 0 at midplane edge
+  Field3D area;   // Cross-sectional area in direction of cross-field transport
 };
 
 namespace {
