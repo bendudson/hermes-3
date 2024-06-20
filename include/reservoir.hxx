@@ -44,11 +44,13 @@ private:
   Field3D reservoir_location; ///< Indicates reservoir if >0
   BoutReal reservoir_density, reservoir_timescale;
   bool diagnose, reservoir_sink_only;
+  BoutReal baffle_position, xpoint_position;   // Parallel positions of reservoirs and xpoint
 
   /// Cell indices where reservoir_location > 0
   Region<Ind3D> reservoir_region;
 
   Field3D density_source, energy_source, momentum_source;
+  Field3D ypos;   // Parallel connection length, 0 at midplane edge
 };
 
 namespace {

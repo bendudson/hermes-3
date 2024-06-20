@@ -40,6 +40,44 @@ Reservoir::Reservoir(std::string name, Options& alloptions, Solver*) : name(name
     options["reservoir_sink_only"].doc("Set reservoir to only take particles away?").withDefault<bool>(true);
 
 
+  xpoint_position =
+      options["xpoint_position"]
+          .doc("Parallel position of X-point [m]")
+          .withDefault<BoutReal>(0);
+
+  baffle_position =
+      options["baffle_position"]
+          .doc("Parallel position of border between upstream-SOL and divertor-SOL reservoirs [m]")
+          .withDefault<BoutReal>(xpoint_position);
+
+
+  // Get ypos
+  const int MYPE = BoutComm::rank();   // Current rank
+  const int NPES = BoutComm::size();    // Number of procs
+  const int NYPE = NPES / mesh->NXPE;    // Number of procs in Y
+  Coordinates *coord = mesh->getCoordinates();
+
+  ypos = 0;
+  BoutReal offset = 0;   // Offset to ensure ylow domain boundary starts at 0
+  auto dy = coord->dy;
+
+  ypos(0,0,0) = 0.5 * dy(0,0,0);
+  for (int id = 0; id <= NYPE-1; ++id) {   // Iterate through each proc
+    for (int j = 0; j <= mesh->LocalNy; ++j) {
+          if (j > 0) {
+            ypos(0, j, 0) = ypos(0, j-1, 0) + 0.5 * dy(0, j-1, 0) + 0.5 * dy(0, j, 0);
+          }
+    }
+    mesh->communicate(ypos);  // Communicate across guard cells so other procs keep counting
+    
+    if (MYPE == 0) {
+      offset = (ypos(0,1,0) + ypos(0,2,0)) / 2;  // Offset lives on first proc
+    }
+  }
+
+  MPI_Bcast(&offset, 1, MPI_DOUBLE, 0, BoutComm::get());  // Ensure all procs get offset
+  ypos -= offset;
+
   // Find every cell that has reservoir_location > 0
   // so we can efficiently iterate over them later
   Region<Ind3D>::RegionIndices indices;
@@ -136,5 +174,15 @@ void Reservoir::outputVars(Options& state) {
          {"standard_name", "momentum transfer"},
          {"long_name", name + std::string(" momentum transfer from reservoir")},
          {"source", "reservoir"}});
+
+    
+    set_with_attrs(    // Doesn't need unnormalising for some reason
+          state[std::string("ypos")], ypos,
+          {{"units", "m"},
+          {"standard_name", "Parallel distance from midplane"},
+          {"long_name", "Parallel distance from midplane"},
+          {"source", "reservoir"}});
+
+
   }
 }
