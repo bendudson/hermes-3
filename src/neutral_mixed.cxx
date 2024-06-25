@@ -92,7 +92,7 @@ NeutralMixed::NeutralMixed(const std::string& name, Options& alloptions, Solver*
   flux_limit_gamma =
       options["flux_limit_gamma"]
           .doc("Sharpness of flux limiter. 1 is very loose, 2 loose and 5 reasonably tight")
-          .withDefault(2);
+          .withDefault(2.0);
 
   override_limiter = options["override_limiter"]
                      .doc("Force conduction and viscosity limiters to use the advection limiter?")
@@ -128,6 +128,14 @@ NeutralMixed::NeutralMixed(const std::string& name, Options& alloptions, Solver*
   legacy_vth_limiter = options["legacy_vth_limiter"]
                           .doc("Use old formulation for Vth in limiter?")
                           .withDefault<bool>(true);
+
+  asymptotic_limiter = options["asymptotic_limiter"]
+                          .doc("Use asymptotic (smooth) rather than boolean limiter?")
+                          .withDefault<bool>(false);
+
+  asymptotic_limiter_advection = options["asymptotic_limiter_advection"]
+                          .doc("Use asymptotic (smooth) rather than boolean limiter?")
+                          .withDefault<bool>(false);
 
   diffusion_collisions_mode = options["diffusion_collisions_mode"]
       .doc("Can be legacy: all enabled collisions excl. IZ, or afn: CX, IZ and NN collisions")
@@ -404,7 +412,13 @@ void NeutralMixed::finally(const Options& state) {
   Dnn = 0;
   if (legacy_limiter) {
     Dmax = advection_limit_alpha * vth / (abs(Grad_perp(logPnlim)) + 1. / maximum_mfp);
-    BOUT_FOR(i, Dmax.getRegion("RGN_NOBNDRY")) { Dnn[i] = BOUTMIN(Dnn_unlimited[i], Dmax[i]); }
+
+    if (asymptotic_limiter_advection) {
+      Dnn = Dnn_unlimited * pow(1. + pow(Dnn_unlimited / Dmax,
+                                          flux_limit_gamma),-1./flux_limit_gamma);
+    } else { 
+      BOUT_FOR(i, Dmax.getRegion("RGN_NOBNDRY")) { Dnn[i] = BOUTMIN(Dnn_unlimited[i], Dmax[i]); }
+    }
   } else {
     Dmax = Dnn_unlimited;
     Dnn = Dnn_unlimited;
@@ -447,7 +461,13 @@ void NeutralMixed::finally(const Options& state) {
     Field3D cond_vel = Pnlim * sqrt((2*Tnlim) / (PI*AA));  // 1D heat flux of 3D maxwellian (Stangeby)  
     kappa_n = kappa_n_unlimited;
     kappa_n_max = conduction_limit_alpha * cond_vel / (abs(Grad_perp(Tn)) + 1. / maximum_mfp);
-    BOUT_FOR(i, kappa_n_max.getRegion("RGN_NOBNDRY")) { kappa_n[i] = BOUTMIN(kappa_n_unlimited[i], kappa_n_max[i]); }
+
+    if (asymptotic_limiter) {
+      kappa_n = kappa_n_unlimited * pow(1. + pow(kappa_n_unlimited / kappa_n_max,
+                                          flux_limit_gamma),-1./flux_limit_gamma);
+    } else {
+      BOUT_FOR(i, kappa_n_max.getRegion("RGN_NOBNDRY")) { kappa_n[i] = BOUTMIN(kappa_n_unlimited[i], kappa_n_max[i]); }
+    }
 
   } else {
     kappa_n = (5. / 2) * DnnNn;

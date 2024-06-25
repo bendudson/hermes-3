@@ -59,6 +59,7 @@ private:
   BoutReal maximum_mfp;   ///< Reduce diffusion using physical MFP limit
   Field3D vth;   ///< Thermal speed to use in flux limiter
   bool legacy_vth_limiter;
+  bool asymptotic_limiter, asymptotic_limiter_advection;
   bool override_limiter;   // Force conduction and viscosity limiters to use the advection limiter?
   bool legacy_limiter; 
   bool legacy_separate_conduction;
