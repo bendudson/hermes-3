@@ -60,9 +60,11 @@ private:
   Field3D vth;   ///< Thermal speed to use in flux limiter
   bool legacy_vth_limiter;
   bool asymptotic_limiter, asymptotic_limiter_advection;
+  bool constant_conduction;
   bool override_limiter;   // Force conduction and viscosity limiters to use the advection limiter?
   bool legacy_limiter; 
   bool legacy_separate_conduction;
+  bool first_RHS {true};
   
   // Limit perpendicular advection fluxes to fraction of thermal speed.
   BoutReal advection_limit_alpha, conduction_limit_alpha, viscosity_limit_alpha;  // Limiters

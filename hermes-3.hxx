@@ -33,7 +33,7 @@ public:
   virtual ~Hermes() {}
 protected:
   int init(bool restarting) override;
-  int rhs(BoutReal t) override;
+  int rhs(BoutReal t, bool linear) override;
   int precon(BoutReal t, BoutReal gamma, BoutReal delta);
 
   /// Add variables to be written to the output file
@@ -52,6 +52,7 @@ private:
 
   /// The evolving state
   Options state;
+
   
   /// Input normalisation constants
   BoutReal Tnorm, Nnorm, Bnorm;

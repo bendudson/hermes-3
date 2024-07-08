@@ -137,6 +137,10 @@ NeutralMixed::NeutralMixed(const std::string& name, Options& alloptions, Solver*
                           .doc("Use asymptotic (smooth) rather than boolean limiter?")
                           .withDefault<bool>(false);
 
+  constant_conduction = options["constant_conduction"]
+                          .doc("Freeze conductivity after first RHS evaluation?")
+                          .withDefault<bool>(false);
+
   diffusion_collisions_mode = options["diffusion_collisions_mode"]
       .doc("Can be legacy: all enabled collisions excl. IZ, or afn: CX, IZ and NN collisions")
       .withDefault<std::string>("legacy");
@@ -456,22 +460,29 @@ void NeutralMixed::finally(const Options& state) {
   DnnNn_unlimited.applyBoundary("dirichlet");    // TODO: is this correct?
   kappa_n_unlimited = (5. / 2) * DnnNn_unlimited;
   kappa_n_Dnchained = (5. / 2) * DnnNn;   // Include only limited D, not also limited kappa
-  
-  if (legacy_limiter and legacy_separate_conduction) {
-    Field3D cond_vel = Pnlim * sqrt((2*Tnlim) / (PI*AA));  // 1D heat flux of 3D maxwellian (Stangeby)  
-    kappa_n = kappa_n_unlimited;
-    kappa_n_max = conduction_limit_alpha * cond_vel / (abs(Grad_perp(Tn)) + 1. / maximum_mfp);
+  bool linear = get<bool>(state["linear"]);
 
-    if (asymptotic_limiter) {
-      kappa_n = kappa_n_unlimited * pow(1. + pow(kappa_n_unlimited / kappa_n_max,
-                                          flux_limit_gamma),-1./flux_limit_gamma);
+  if (not linear) {
+  
+    if (legacy_limiter and legacy_separate_conduction) {
+      Field3D cond_vel = Pnlim * sqrt((2*Tnlim) / (PI*AA));  // 1D heat flux of 3D maxwellian (Stangeby)  
+      kappa_n = kappa_n_unlimited;
+      kappa_n_max = conduction_limit_alpha * cond_vel / (abs(Grad_perp(Tn)) + 1. / maximum_mfp);
+
+      if (asymptotic_limiter) {
+        kappa_n = kappa_n_unlimited * pow(1. + pow(kappa_n_unlimited / kappa_n_max,
+                                            flux_limit_gamma),-1./flux_limit_gamma);
+      } else {
+        BOUT_FOR(i, kappa_n_max.getRegion("RGN_NOBNDRY")) { kappa_n[i] = BOUTMIN(kappa_n_unlimited[i], kappa_n_max[i]); }
+      }
+
     } else {
-      BOUT_FOR(i, kappa_n_max.getRegion("RGN_NOBNDRY")) { kappa_n[i] = BOUTMIN(kappa_n_unlimited[i], kappa_n_max[i]); }
+      kappa_n = (5. / 2) * DnnNn;
+      kappa_n_max = 0;
     }
 
   } else {
-    kappa_n = (5. / 2) * DnnNn;
-    kappa_n_max = 0;
+    throw BoutException("oops");
   }
     
 
