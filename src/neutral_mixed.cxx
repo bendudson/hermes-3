@@ -463,7 +463,6 @@ void NeutralMixed::finally(const Options& state) {
   bool linear = get<bool>(state["linear"]);
 
   if (not linear) {
-  
     if (legacy_limiter and legacy_separate_conduction) {
       Field3D cond_vel = Pnlim * sqrt((2*Tnlim) / (PI*AA));  // 1D heat flux of 3D maxwellian (Stangeby)  
       kappa_n = kappa_n_unlimited;
@@ -482,7 +481,7 @@ void NeutralMixed::finally(const Options& state) {
     }
 
   } else {
-    throw BoutException("oops");
+    // output<<std::string("LINEAR\n");
   }
     
 
