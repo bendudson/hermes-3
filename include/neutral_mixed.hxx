@@ -64,6 +64,7 @@ private:
   bool override_limiter;   // Force conduction and viscosity limiters to use the advection limiter?
   bool legacy_limiter; 
   bool legacy_separate_conduction;
+  bool freeze_kappa_linear;
   bool first_RHS {true};
   
   // Limit perpendicular advection fluxes to fraction of thermal speed.

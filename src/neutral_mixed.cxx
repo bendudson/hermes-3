@@ -106,6 +106,10 @@ NeutralMixed::NeutralMixed(const std::string& name, Options& alloptions, Solver*
                      .doc("Feature separate conduction limiter when legacy form enabled? Requires legacy_limiter=True.")
                      .withDefault<bool>(false);
 
+  freeze_kappa_linear = options["freeze_kappa_linear"]
+                     .doc("Do not evolve conductivity in linear iterations to improve solver performance.")
+                     .withDefault<bool>(false);
+
   maximum_mfp =
       options["maximum_mfp"]
           .doc("Add a pseudo-collisionality representing physical MFP limit to pressure diffusion model")
@@ -460,9 +464,22 @@ void NeutralMixed::finally(const Options& state) {
   DnnNn_unlimited.applyBoundary("dirichlet");    // TODO: is this correct?
   kappa_n_unlimited = (5. / 2) * DnnNn_unlimited;
   kappa_n_Dnchained = (5. / 2) * DnnNn;   // Include only limited D, not also limited kappa
-  bool linear = get<bool>(state["linear"]);
+  bool nonlinear = ~get<bool>(state["linear"]);
+  bool evolve_kappa{true};
 
-  if (not linear) {
+  // Evolve kappa in nonlinear and freeze in linear iterations
+  // Mitigate impact of strong nonlinearity on performance
+  if (not freeze_kappa_linear) {
+    evolve_kappa = true;
+  } else {
+    if (nonlinear) {
+      evolve_kappa = true;
+    } else {
+      evolve_kappa = false;
+    }
+  }
+
+  if (evolve_kappa) {
     if (legacy_limiter and legacy_separate_conduction) {
       Field3D cond_vel = Pnlim * sqrt((2*Tnlim) / (PI*AA));  // 1D heat flux of 3D maxwellian (Stangeby)  
       kappa_n = kappa_n_unlimited;
@@ -479,9 +496,6 @@ void NeutralMixed::finally(const Options& state) {
       kappa_n = (5. / 2) * DnnNn;
       kappa_n_max = 0;
     }
-
-  } else {
-    // output<<std::string("LINEAR\n");
   }
     
 
