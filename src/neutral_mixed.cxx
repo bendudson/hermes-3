@@ -464,7 +464,7 @@ void NeutralMixed::finally(const Options& state) {
   DnnNn_unlimited.applyBoundary("dirichlet");    // TODO: is this correct?
   kappa_n_unlimited = (5. / 2) * DnnNn_unlimited;
   kappa_n_Dnchained = (5. / 2) * DnnNn;   // Include only limited D, not also limited kappa
-  bool nonlinear = ~get<bool>(state["linear"]);
+  bool linear = get<bool>(state["linear"]);
   bool evolve_kappa{true};
 
   // Evolve kappa in nonlinear and freeze in linear iterations
@@ -472,7 +472,7 @@ void NeutralMixed::finally(const Options& state) {
   if (not freeze_kappa_linear) {
     evolve_kappa = true;
   } else {
-    if (nonlinear) {
+    if (not linear) {
       evolve_kappa = true;
     } else {
       evolve_kappa = false;
@@ -482,12 +482,17 @@ void NeutralMixed::finally(const Options& state) {
   if (evolve_kappa) {
     if (legacy_limiter and legacy_separate_conduction) {
       Field3D cond_vel = Pnlim * sqrt((2*Tnlim) / (PI*AA));  // 1D heat flux of 3D maxwellian (Stangeby)  
-      kappa_n = kappa_n_unlimited;
+      kappa_n = 0;
       kappa_n_max = conduction_limit_alpha * cond_vel / (abs(Grad_perp(Tn)) + 1. / maximum_mfp);
 
       if (asymptotic_limiter) {
-        kappa_n = kappa_n_unlimited * pow(1. + pow(kappa_n_unlimited / kappa_n_max,
+        // kappa_n = kappa_n_unlimited * pow(1. + pow(kappa_n_unlimited / kappa_n_max,    // TODO: This doesn't work - why?
+        //                                     flux_limit_gamma),-1./flux_limit_gamma);
+
+        BOUT_FOR(i, kappa_n_max.getRegion("RGN_NOBNDRY")) { 
+          kappa_n[i] = kappa_n_unlimited[i] * pow(1. + pow(kappa_n_unlimited[i] / kappa_n_max[i],
                                             flux_limit_gamma),-1./flux_limit_gamma);
+          }
       } else {
         BOUT_FOR(i, kappa_n_max.getRegion("RGN_NOBNDRY")) { kappa_n[i] = BOUTMIN(kappa_n_unlimited[i], kappa_n_max[i]); }
       }
