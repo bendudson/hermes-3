@@ -422,11 +422,16 @@ void NeutralMixed::finally(const Options& state) {
     Dmax = advection_limit_alpha * vth / (abs(Grad_perp(logPnlim)) + 1. / maximum_mfp);
 
     if (asymptotic_limiter_advection) {
-      Dnn = Dnn_unlimited * pow(1. + pow(Dnn_unlimited / Dmax,
+      BOUT_FOR(i, Dmax.getRegion("RGN_NOBNDRY")) { 
+        Dnn[i] = Dnn_unlimited[i] * pow(1. + pow(Dnn_unlimited[i] / Dmax[i],
                                           flux_limit_gamma),-1./flux_limit_gamma);
+        }
     } else { 
-      BOUT_FOR(i, Dmax.getRegion("RGN_NOBNDRY")) { Dnn[i] = BOUTMIN(Dnn_unlimited[i], Dmax[i]); }
+      BOUT_FOR(i, Dmax.getRegion("RGN_NOBNDRY")) { 
+        Dnn[i] = BOUTMIN(Dnn_unlimited[i], Dmax[i]); 
+        }
     }
+    
   } else {
     Dmax = Dnn_unlimited;
     Dnn = Dnn_unlimited;
