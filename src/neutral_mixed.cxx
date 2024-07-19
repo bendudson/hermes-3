@@ -114,6 +114,14 @@ NeutralMixed::NeutralMixed(const std::string& name, Options& alloptions, Solver*
                      .doc("Do not evolve conductivity after the first RHS evaluation.")
                      .withDefault<bool>(false);
 
+  freeze_dn_linear = options["freeze_dn_linear"]
+                     .doc("Do not evolve conductivity in linear iterations to improve solver performance.")
+                     .withDefault<bool>(false);
+
+  freeze_dn_rhs = options["freeze_dn_rhs"]
+                     .doc("Do not evolve conductivity after the first RHS evaluation.")
+                     .withDefault<bool>(false);
+
   debug_prints = options["debug_prints"]
                      .doc("Print linear/nonlinear and evolving kappa status.")
                      .withDefault<bool>(false);
@@ -425,31 +433,67 @@ void NeutralMixed::finally(const Options& state) {
     vth = 0.25 * sqrt((8 * Tn) / (PI * AA));
   }
 
-  // Legacy flux limiter: limit Dn upstream
-  Dnn = 0;
-  if (legacy_limiter) {
-    Dmax = advection_limit_alpha * vth / (abs(Grad_perp(logPnlim)) + 1. / maximum_mfp);
+  ///// This is the logic to freeze/unfreeze Dn or kappa
+  ///// either after first RHS or in all linear iterations
+  bool linear = get<bool>(state["linear"]);
+  bool evolve_kappa{true};
+  bool evolve_dn{true};
 
-    if (asymptotic_limiter_advection) {
-      BOUT_FOR(i, Dmax.getRegion("RGN_NOBNDRY")) { 
-        Dnn[i] = Dnn_unlimited[i] * pow(1. + pow(Dnn_unlimited[i] / Dmax[i],
-                                          flux_limit_gamma),-1./flux_limit_gamma);
-        }
-    } else { 
-      BOUT_FOR(i, Dmax.getRegion("RGN_NOBNDRY")) { 
-        Dnn[i] = BOUTMIN(Dnn_unlimited[i], Dmax[i]); 
-        }
-    }
-    
+  if (not freeze_kappa_linear) {
+    evolve_kappa = true;
   } else {
-    Dmax = Dnn_unlimited;
-    Dnn = Dnn_unlimited;
+    if (not linear) {
+      evolve_kappa = true;
+    } else {
+      evolve_kappa = false;
+    }
   }
 
-  if (diffusion_limit > 0.0) {
-    // Impose an upper limit on the diffusion coefficient
-    BOUT_FOR(i, Dnn.getRegion("RGN_NOBNDRY")) {
-      Dnn[i] = BOUTMIN(Dnn[i], diffusion_limit);
+  if (freeze_kappa_rhs and not first_rhs) {
+    evolve_kappa = false;
+  }
+
+  if (not freeze_dn_linear) {
+    evolve_dn = true;
+  } else {
+    if (not linear) {
+      evolve_dn = true;
+    } else {
+      evolve_dn = false;
+    }
+  }
+
+  if (freeze_dn_rhs and not first_rhs) {
+    evolve_dn = false;
+  }
+
+  // Legacy flux limiter: limit Dn upstream
+  if (evolve_dn) {
+    Dnn = 0;
+    if (legacy_limiter) {
+      Dmax = advection_limit_alpha * vth / (abs(Grad_perp(logPnlim)) + 1. / maximum_mfp);
+
+      if (asymptotic_limiter_advection) {
+        BOUT_FOR(i, Dmax.getRegion("RGN_NOBNDRY")) { 
+          Dnn[i] = Dnn_unlimited[i] * pow(1. + pow(Dnn_unlimited[i] / Dmax[i],
+                                            flux_limit_gamma),-1./flux_limit_gamma);
+          }
+      } else { 
+        BOUT_FOR(i, Dmax.getRegion("RGN_NOBNDRY")) { 
+          Dnn[i] = BOUTMIN(Dnn_unlimited[i], Dmax[i]); 
+          }
+      }
+      
+    } else {
+      Dmax = Dnn_unlimited;
+      Dnn = Dnn_unlimited;
+    }
+
+    if (diffusion_limit > 0.0) {
+      // Impose an upper limit on the diffusion coefficient
+      BOUT_FOR(i, Dnn.getRegion("RGN_NOBNDRY")) {
+        Dnn[i] = BOUTMIN(Dnn[i], diffusion_limit);
+      }
     }
   }
 
@@ -478,25 +522,9 @@ void NeutralMixed::finally(const Options& state) {
   DnnNn_unlimited.applyBoundary("dirichlet");    // TODO: is this correct?
   kappa_n_unlimited = (5. / 2) * DnnNn_unlimited;
   kappa_n_Dnchained = (5. / 2) * DnnNn;   // Include only limited D, not also limited kappa
-  bool linear = get<bool>(state["linear"]);
-  bool evolve_kappa{true};
+  
 
-  // Evolve kappa in nonlinear and freeze in linear iterations
-  // Mitigate impact of strong nonlinearity on performance
-
-  if (not freeze_kappa_linear) {
-    evolve_kappa = true;
-  } else {
-    if (not linear) {
-      evolve_kappa = true;
-    } else {
-      evolve_kappa = false;
-    }
-  }
-
-  if (freeze_kappa_rhs and not first_rhs) {
-    evolve_kappa = false;
-  }
+  
 
   if (debug_prints) {
 
@@ -512,6 +540,10 @@ void NeutralMixed::finally(const Options& state) {
 
     if (evolve_kappa) {
       output << std::string(" <--------- EVOLVING KAPPA");
+    } 
+
+    if (evolve_dn) {
+      output << std::string(" <--------- EVOLVING Dn");
     } 
 
     output << std::string("\n");
@@ -562,38 +594,41 @@ void NeutralMixed::finally(const Options& state) {
   conduction_factor = 1;
   viscosity_factor = 1;
 
-  // Advection (of particles, pressure, momentum)
-  if (advection_limit_alpha > 0.0) {
-    Vector3D v_perp = -Dnn * Grad_perp(logPnlim);     // vector of perp velocity
-    Field3D v_abs = sqrt(v_perp * v_perp);            // magintude: |v dot v|
-    advection_flux_abs = Nnlim * v_abs;
-    advection_limit = Nnlim * vth;          
-    advection_factor = pow(1. + pow(advection_flux_abs / (advection_limit_alpha * advection_limit),
-                                          flux_limit_gamma),-1./flux_limit_gamma);
-  } else {
-    advection_factor = 1;
-  }
+  if (not legacy_limiter) {
 
-  // Conduction
-  if (conduction_limit_alpha > 0.0 and neutral_conduction) {
-    Vector3D heat_flux = -kappa_n * Grad_perp(Tn);  
-    Field3D heat_flux_abs = sqrt(heat_flux * heat_flux);
-    Field3D heat_limit = Pnlim * sqrt((2*Tnlim) / (PI*AA));  // 1D heat flux of 3D maxwellian (Stangeby)          
-    conduction_factor = pow(1. + pow(heat_flux_abs / (conduction_limit_alpha * heat_limit),
-                                          flux_limit_gamma),-1./flux_limit_gamma);
-  } else {
-    conduction_factor = 1;
-  }
+    // Advection (of particles, pressure, momentum)
+    if (advection_limit_alpha > 0.0) {
+      Vector3D v_perp = -Dnn * Grad_perp(logPnlim);     // vector of perp velocity
+      Field3D v_abs = sqrt(v_perp * v_perp);            // magintude: |v dot v|
+      advection_flux_abs = Nnlim * v_abs;
+      advection_limit = Nnlim * vth;          
+      advection_factor = pow(1. + pow(advection_flux_abs / (advection_limit_alpha * advection_limit),
+                                            flux_limit_gamma),-1./flux_limit_gamma);
+    } else {
+      advection_factor = 1;
+    }
 
-  // Viscosity
-  if (viscosity_limit_alpha > 0.0 and neutral_viscosity) {
-    Vector3D momentum_flux = -eta_n * Grad_perp(Vn);     
-    Field3D momentum_flux_abs = sqrt(momentum_flux * momentum_flux);
-    Field3D momentum_limit = Pnlim;    // Can't have more dynamic pressure than there is static pressure
-    viscosity_factor = pow(1. + pow(momentum_flux_abs / (viscosity_limit_alpha * momentum_limit),
-                                          flux_limit_gamma),-1./flux_limit_gamma);
-  } else {
-    viscosity_factor = 1;
+    // Conduction
+    if (conduction_limit_alpha > 0.0 and neutral_conduction) {
+      Vector3D heat_flux = -kappa_n * Grad_perp(Tn);  
+      Field3D heat_flux_abs = sqrt(heat_flux * heat_flux);
+      Field3D heat_limit = Pnlim * sqrt((2*Tnlim) / (PI*AA));  // 1D heat flux of 3D maxwellian (Stangeby)          
+      conduction_factor = pow(1. + pow(heat_flux_abs / (conduction_limit_alpha * heat_limit),
+                                            flux_limit_gamma),-1./flux_limit_gamma);
+    } else {
+      conduction_factor = 1;
+    }
+
+    // Viscosity
+    if (viscosity_limit_alpha > 0.0 and neutral_viscosity) {
+      Vector3D momentum_flux = -eta_n * Grad_perp(Vn);     
+      Field3D momentum_flux_abs = sqrt(momentum_flux * momentum_flux);
+      Field3D momentum_limit = Pnlim;    // Can't have more dynamic pressure than there is static pressure
+      viscosity_factor = pow(1. + pow(momentum_flux_abs / (viscosity_limit_alpha * momentum_limit),
+                                            flux_limit_gamma),-1./flux_limit_gamma);
+    } else {
+      viscosity_factor = 1;
+    }
   }
 
   // Force conduction/viscosity to use advection limiter
@@ -602,12 +637,7 @@ void NeutralMixed::finally(const Options& state) {
     viscosity_factor = advection_factor;
   }
 
-  // Set all flux factors to 1, use limited Dnn instead (see upstream)
-  if (legacy_limiter) {
-    advection_factor = 1;
-    conduction_factor = 1;
-    viscosity_factor = 1;
-  }
+  
 
   
 
@@ -929,6 +959,22 @@ void NeutralMixed::outputVars(Options& state) {
                     {"long_name", name + " particle flux factor"},
                     {"species", name},
                     {"source", "neutral_mixed"}});
+    set_with_attrs(state[std::string("conduction_factor_") + name], conduction_factor,
+                    {{"time_dimension", "t"},
+                      {"units", ""},
+                      {"conversion", 1.0},
+                      {"standard_name", "flux factor"},
+                      {"long_name", name + " conduction_factor"},
+                      {"species", name},
+                      {"source", "neutral_mixed"}});
+    set_with_attrs(state[std::string("viscosity_factor_") + name], viscosity_factor,
+                    {{"time_dimension", "t"},
+                      {"units", ""},
+                      {"conversion", 1.0},
+                      {"standard_name", "flux factor"},
+                      {"long_name", name + " viscosity_factor"},
+                      {"species", name},
+                      {"source", "neutral_mixed"}});
     set_with_attrs(state[std::string("vth_") + name], vth,
                    {{"time_dimension", "t"},
                     {"units", "m / s"},
@@ -937,38 +983,26 @@ void NeutralMixed::outputVars(Options& state) {
                     {"long_name", name + " thermal speed"},
                     {"species", name},
                     {"source", "neutral_mixed"}});
-    set_with_attrs(state[std::string("advection_flux_abs_") + name], advection_flux_abs,
-                   {{"time_dimension", "t"},
-                    {"units", "m^-2 s^-1"},
-                    {"conversion", Nnorm * Cs0},
-                    {"standard_name", ""},
-                    {"long_name", ""},
-                    {"species", ""},
-                    {"source", "neutral_mixed"}});
-    set_with_attrs(state[std::string("advection_limit_") + name], advection_limit,
-                   {{"time_dimension", "t"},
-                    {"units", "m^-2 s^-1"},
-                    {"conversion", Nnorm * Cs0},
-                    {"standard_name", ""},
-                    {"long_name", ""},
-                    {"species", ""},
-                    {"source", "neutral_mixed"}});
-    set_with_attrs(state[std::string("conduction_factor_") + name], conduction_factor,
-                   {{"time_dimension", "t"},
-                    {"units", ""},
-                    {"conversion", 1.0},
-                    {"standard_name", "flux factor"},
-                    {"long_name", name + " conduction_factor"},
-                    {"species", name},
-                    {"source", "neutral_mixed"}});
-    set_with_attrs(state[std::string("viscosity_factor_") + name], viscosity_factor,
-                   {{"time_dimension", "t"},
-                    {"units", ""},
-                    {"conversion", 1.0},
-                    {"standard_name", "flux factor"},
-                    {"long_name", name + " viscosity_factor"},
-                    {"species", name},
-                    {"source", "neutral_mixed"}});
+
+    if (not legacy_limiter) {
+      set_with_attrs(state[std::string("advection_flux_abs_") + name], advection_flux_abs,
+                    {{"time_dimension", "t"},
+                      {"units", "m^-2 s^-1"},
+                      {"conversion", Nnorm * Cs0},
+                      {"standard_name", ""},
+                      {"long_name", ""},
+                      {"species", ""},
+                      {"source", "neutral_mixed"}});
+      set_with_attrs(state[std::string("advection_limit_") + name], advection_limit,
+                    {{"time_dimension", "t"},
+                      {"units", "m^-2 s^-1"},
+                      {"conversion", Nnorm * Cs0},
+                      {"standard_name", ""},
+                      {"long_name", ""},
+                      {"species", ""},
+                      {"source", "neutral_mixed"}});
+      
+    }
     set_with_attrs(state[std::string("SN") + name], Sn,
                    {{"time_dimension", "t"},
                     {"units", "m^-3 s^-1"},
