@@ -110,6 +110,14 @@ NeutralMixed::NeutralMixed(const std::string& name, Options& alloptions, Solver*
                      .doc("Do not evolve conductivity in linear iterations to improve solver performance.")
                      .withDefault<bool>(false);
 
+  freeze_kappa_rhs = options["freeze_kappa_rhs"]
+                     .doc("Do not evolve conductivity after the first RHS evaluation.")
+                     .withDefault<bool>(false);
+
+  debug_prints = options["debug_prints"]
+                     .doc("Print linear/nonlinear and evolving kappa status.")
+                     .withDefault<bool>(false);
+
   maximum_mfp =
       options["maximum_mfp"]
           .doc("Add a pseudo-collisionality representing physical MFP limit to pressure diffusion model")
@@ -323,6 +331,7 @@ void NeutralMixed::transform(Options& state) {
 }
 
 void NeutralMixed::finally(const Options& state) {
+  static bool first_rhs = true;
   AUTO_TRACE();
   auto& localstate = state["species"][name];
 
@@ -474,6 +483,7 @@ void NeutralMixed::finally(const Options& state) {
 
   // Evolve kappa in nonlinear and freeze in linear iterations
   // Mitigate impact of strong nonlinearity on performance
+
   if (not freeze_kappa_linear) {
     evolve_kappa = true;
   } else {
@@ -482,6 +492,30 @@ void NeutralMixed::finally(const Options& state) {
     } else {
       evolve_kappa = false;
     }
+  }
+
+  if (freeze_kappa_rhs and not first_rhs) {
+    evolve_kappa = false;
+  }
+
+  if (debug_prints) {
+
+    if (first_rhs) {
+      output << std::string("*************************FIRST RHS\n");
+    }
+
+    if (linear) {
+      output << std::string("LINEAR");
+    } else {
+      output << std::string("NONLINEAR");
+    }
+
+    if (evolve_kappa) {
+      output << std::string(" <--------- EVOLVING KAPPA");
+    } 
+
+    output << std::string("\n");
+
   }
 
   if (evolve_kappa) {
@@ -735,6 +769,11 @@ void NeutralMixed::finally(const Options& state) {
     }
   }
 #endif
+
+if (first_rhs) {
+    first_rhs = false;
+  }
+
 }
 
 void NeutralMixed::outputVars(Options& state) {
