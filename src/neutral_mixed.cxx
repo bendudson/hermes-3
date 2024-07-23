@@ -10,6 +10,8 @@
 #include "../include/hermes_build_config.hxx"
 #include "../include/neutral_mixed.hxx"
 
+#include <iomanip> // For print formatting
+
 using bout::globals::mesh;
 
 using ParLimiter = FV::Upwind;
@@ -526,29 +528,6 @@ void NeutralMixed::finally(const Options& state) {
 
   
 
-  if (debug_prints) {
-
-    if (first_rhs) {
-      output << std::string("*************************FIRST RHS\n");
-    }
-
-    if (linear) {
-      output << std::string("LINEAR");
-    } else {
-      output << std::string("NONLINEAR");
-    }
-
-    if (evolve_kappa) {
-      output << std::string(" <--------- EVOLVING KAPPA");
-    } 
-
-    if (evolve_dn) {
-      output << std::string(" <--------- EVOLVING Dn");
-    } 
-
-    output << std::string("\n");
-
-  }
 
   if (evolve_kappa) {
     if (legacy_limiter and legacy_separate_conduction) {
@@ -572,6 +551,36 @@ void NeutralMixed::finally(const Options& state) {
       kappa_n = (5. / 2) * DnnNn;
       kappa_n_max = 0;
     }
+  }
+
+  if (debug_prints) {
+
+    if (first_rhs) {
+      output << std::string("*************************FIRST RHS\n");
+    }
+
+    if (linear) {
+      output << "LINEAR   ";
+    } else {
+      output << "NONLINEAR";
+    }
+
+    for (int jz = 0; jz < mesh->LocalNz; jz++) {
+      output << "    kappa = " << std::scientific << std::setprecision(6) << kappa_n(10, 40, jz);
+      output << ",   DnnNn = " << std::scientific << std::setprecision(6) << DnnNn(10, 40, jz);
+      output << ",   Nn = "    << std::scientific << std::setprecision(6) << Nn(10, 40, jz);
+    }
+
+    if (evolve_kappa) {
+      output << ",   evolving kappa";
+    } 
+
+    if (evolve_dn) {
+      output << ",   evolving Dn";
+    }
+
+    output << "\n";
+
   }
     
 
