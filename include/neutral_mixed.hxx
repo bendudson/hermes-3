@@ -101,6 +101,9 @@ private:
   Field3D momentum_flow_xlow, momentum_flow_ylow;
   Field3D energy_flow_xlow, energy_flow_ylow;
   Field3D conduction_flow_xlow, conduction_flow_ylow;
+
+  bool merge_cells; ///< Merge neighboring cells
+  Region<Ind3D> merge_region; ///< Mark cells to merge
 };
 
 namespace {

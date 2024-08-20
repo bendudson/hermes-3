@@ -54,6 +54,9 @@ private:
   bool diagnose; ///< Output additional diagnostics?
   bool fix_momentum_boundary_flux; ///< Fix momentum flux to boundary condition?
   Field3D flow_xlow, flow_ylow; ///< Momentum flow diagnostics
+
+  bool merge_cells; ///< Merge neighboring cells
+  Region<Ind3D> merge_region; ///< Mark cells to merge
 };
 
 namespace {

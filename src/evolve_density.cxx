@@ -124,11 +124,31 @@ EvolveDensity::EvolveDensity(std::string name, Options& alloptions, Solver* solv
     }
   }
 
-
-
   neumann_boundary_average_z = alloptions[std::string("N") + name]["neumann_boundary_average_z"]
     .doc("Apply neumann boundary with Z average?")
     .withDefault<bool>(false);
+
+  merge_cells = options["merge_cells"]
+    .doc("Merge marked cells with their neighbors in Y")
+    .withDefault<bool>(false);
+  if (merge_cells) {
+    Field2D merge_mask2d;
+    if (mesh->get(merge_mask2d, "merge_mask") != 0) {
+      throw BoutException("Could not read merge_mask variable");
+    }
+    Field3D merge_mask = merge_mask2d;
+
+    // Find every cell that has merge_mask > 0
+    // so we can efficiently iterate over them later
+    Region<Ind3D>::RegionIndices indices;
+    BOUT_FOR_SERIAL(i, merge_mask.getRegion("RGN_NOBNDRY")) {
+      if (merge_mask[i] > 1e-5) {
+        // Add this cell to the iteration
+        indices.push_back(i);
+      }
+    }
+    merge_region = Region<Ind3D>(indices);
+  }
 }
 
 void EvolveDensity::transform(Options& state) {
@@ -276,6 +296,34 @@ void EvolveDensity::finally(const Options& state) {
   // Scale time derivatives
   if (state.isSet("scale_timederivs")) {
     ddt(N) *= get<Field3D>(state["scale_timederivs"]);
+  }
+
+  if (merge_cells) {
+    mesh->communicate(ddt(N));
+    const auto coord = N.getCoordinates();
+
+    // Merge neighbouring cells in Y
+    BOUT_FOR(i, merge_region) {
+      // Average with neighbors, weighted by cell volume
+      // Half of the cell with each neighbour
+      auto im = i.ym();
+      auto ip = i.yp();
+
+      // Volume of neighouring cells
+      BoutReal Vc = coord->J[i] * coord->dy[i];
+      BoutReal Vm = coord->J[im] * coord->dy[im];
+      BoutReal Vp = coord->J[ip] * coord->dy[ip];
+
+      // Half of the central cell is merged with each side
+      ddt(N)[im] = (0.5 * Vc * ddt(N)[i] + Vm * ddt(N)[im]) /
+        (0.5 * Vc + Vm);
+
+      ddt(N)[ip] = (0.5 * Vc * ddt(N)[i] + Vp * ddt(N)[ip]) /
+        (0.5 * Vc + Vp);
+
+      // Central cell is average of either side
+      ddt(N)[i] = 0.5 * (ddt(N)[im] + ddt(N)[ip]);
+    }
   }
 
   if (evolve_log) {
