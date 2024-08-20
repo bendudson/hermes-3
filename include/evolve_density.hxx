@@ -93,6 +93,9 @@ private:
 
   bool diagnose; ///< Output additional diagnostics?
   Field3D flow_xlow, flow_ylow; ///< Particle flow diagnostics
+
+  bool merge_cells; ///< Merge neighboring cells
+  Region<Ind3D> merge_region; ///< Mark cells to merge
 };
 
 namespace {

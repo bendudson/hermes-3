@@ -140,6 +140,27 @@ NeutralMixed::NeutralMixed(const std::string& name, Options& alloptions, Solver*
   DnnTn.setBoundary(std::string("Dnn") + name);
   DnnNVn.setBoundary(std::string("Dnn") + name);
 
+  merge_cells = options["merge_cells"]
+    .doc("Merge marked cells with their neighbors in Y")
+    .withDefault<bool>(false);
+  if (merge_cells) {
+    Field2D merge_mask2d;
+    if (mesh->get(merge_mask2d, "merge_mask") != 0) {
+      throw BoutException("Could not read merge_mask variable");
+    }
+    Field3D merge_mask = merge_mask2d;
+
+    // Find every cell that has merge_mask > 0
+    // so we can efficiently iterate over them later
+    Region<Ind3D>::RegionIndices indices;
+    BOUT_FOR_SERIAL(i, merge_mask.getRegion("RGN_NOBNDRY")) {
+      if (merge_mask[i] > 1e-5) {
+        // Add this cell to the iteration
+        indices.push_back(i);
+      }
+    }
+    merge_region = Region<Ind3D>(indices);
+  }
 }
 
 void NeutralMixed::transform(Options& state) {
@@ -425,6 +446,51 @@ void NeutralMixed::finally(const Options& state) {
     }
   }
 #endif
+
+  if (first_rhs) {
+    first_rhs = false;
+  }
+
+  if (merge_cells) {
+    mesh->communicate(ddt(Nn), ddt(Pn), ddt(NVn));
+
+    const auto coord = NVn.getCoordinates();
+
+    // Merge neighbouring cells in Y
+    BOUT_FOR(i, merge_region) {
+      // Average with neighbors, weighted by cell volume
+      // Half of the cell with each neighbour
+      auto im = i.ym();
+      auto ip = i.yp();
+
+      // Volume of neighouring cells
+      BoutReal Vc = coord->J[i] * coord->dy[i];
+      BoutReal Vm = coord->J[im] * coord->dy[im];
+      BoutReal Vp = coord->J[ip] * coord->dy[ip];
+      
+      // Half of the central cell is merged with each side
+      ddt(Nn)[im] = (0.5 * Vc * ddt(Nn)[i] + Vm * ddt(Nn)[im]) /
+        (0.5 * Vc + Vm);
+
+      ddt(Nn)[ip] = (0.5 * Vc * ddt(Nn)[i] + Vp * ddt(Nn)[ip]) /
+        (0.5 * Vc + Vp);
+
+      // Central cell is average of either side
+      ddt(Nn)[i] = 0.5 * (ddt(Nn)[im] + ddt(Nn)[ip]);
+
+      ddt(Pn)[im] = (0.5 * Vc * ddt(Pn)[i] + Vm * ddt(Pn)[im]) /
+        (0.5 * Vc + Vm);
+      ddt(Pn)[ip] = (0.5 * Vc * ddt(Pn)[i] + Vp * ddt(Pn)[ip]) /
+        (0.5 * Vc + Vp);
+      ddt(Pn)[i] = 0.5 * (ddt(Pn)[im] + ddt(Pn)[ip]);
+
+      ddt(NVn)[im] = (0.5 * Vc * ddt(NVn)[i] + Vm * ddt(NVn)[im]) /
+        (0.5 * Vc + Vm);
+      ddt(NVn)[ip] = (0.5 * Vc * ddt(NVn)[i] + Vp * ddt(NVn)[ip]) /
+        (0.5 * Vc + Vp);
+      ddt(NVn)[i] = 0.5 * (ddt(NVn)[im] + ddt(NVn)[ip]);
+    }
+  }
 }
 
 void NeutralMixed::outputVars(Options& state) {
