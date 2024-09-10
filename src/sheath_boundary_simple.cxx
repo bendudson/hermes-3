@@ -596,17 +596,11 @@ void SheathBoundarySimple::transform(Options& state) {
           auto ip = i.yp();
           auto im = i.ym();
 
-          // Free gradient of log electron density and temperature
-          // This ensures that the guard cell values remain positive
-          // exp( 2*log(N[i]) - log(N[ip]) )
+          // Extrapolate temperature first, calculate Bohm, then calculate
+          // Ne from NV=const, P from NT=const and Ne from Ne/Ni=const
 
-          Ni[ip] = limitFree(Ni[im], Ni[i], density_boundary_mode);
           Ti[ip] = limitFree(Ti[im], Ti[i], temperature_boundary_mode);
-          Pi[ip] = limitFree(Pi[im], Pi[i], pressure_boundary_mode);
 
-          // Calculate sheath values at half-way points (cell edge)
-          const BoutReal nesheath = 0.5 * (Ne[ip] + Ne[i]);
-          const BoutReal nisheath = 0.5 * (Ni[ip] + Ni[i]);
           const BoutReal tesheath =
               floor(0.5 * (Te[ip] + Te[i]), 1e-5); // electron temperature
           const BoutReal tisheath =
@@ -621,19 +615,24 @@ void SheathBoundarySimple::transform(Options& state) {
             visheath = Vi[i];
           }
 
-          BoutReal q = gamma_i * tisheath * nisheath * visheath;
-
           if (no_flow) {
             visheath = 0.0;
           }
 
           // Set boundary conditions on flows
           Vi[ip] = 2. * visheath - Vi[i];
-          NVi[ip] = 2. * Mi * nisheath * visheath - NVi[i];
+          Ni[ip] = Ni[im] * Vi[im] / Vi[ip];  // N*V must be constant between last and guard cell
+          Ne[ip] = Ne[im] / Ni[im] * Ni[ip];  // Assume Ne/Ni constant TODO: is this right?
+          Pi[ip] = Ti[ip] * Ni[ip];            // Pressure consistent with N*T
+          NVi[ip] = Mi * Ni[ip] * Vi[ip];     // Momentum consistent with N*V
+
+          const BoutReal nesheath = 0.5 * (Ne[ip] + Ne[i]);
+          const BoutReal nisheath = 0.5 * (Ni[ip] + Ni[i]);
 
           // Take into account the flow of energy due to fluid flow
           // This is additional energy flux through the sheath
           // Note: Here this is positive because visheath > 0
+          BoutReal q = gamma_i * tisheath * nisheath * visheath;
           q -= (2.5 * tisheath + 0.5 * Mi * SQ(visheath)) * nisheath * visheath;
 
           // Multiply by cell area to get power
