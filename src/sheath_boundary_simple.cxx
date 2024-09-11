@@ -621,8 +621,8 @@ void SheathBoundarySimple::transform(Options& state) {
 
           // Set boundary conditions on flows
           Vi[ip] = 2. * visheath - Vi[i];
-          Ni[ip] = Ni[im] * Vi[im] / Vi[ip];  // N*V must be constant between last and guard cell
-          Ne[ip] = Ne[im] / Ni[im] * Ni[ip];  // Assume Ne/Ni constant TODO: is this right?
+          Ni[ip] = Ni[i] * Vi[i] / Vi[ip];  // N*V must be constant between last and guard cell
+          Ne[ip] = Ne[i] / Ni[i] * Ni[ip];  // Assume Ne/Ni constant TODO: is this right?
           Pi[ip] = Ti[ip] * Ni[ip];            // Pressure consistent with N*T
           NVi[ip] = Mi * Ni[ip] * Vi[ip];     // Momentum consistent with N*V
 
