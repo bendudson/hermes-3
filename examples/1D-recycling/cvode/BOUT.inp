@@ -11,7 +11,7 @@
 #  - Feedback control of upstream density
 
 # This is the number of output time-steps to write out
-nout = 400
+nout = 100
 # This is the interval between writing output time-steps (solver timestep is automatic)
 # Normalisation: see BOUT++ docs
 timestep = 5000
