@@ -218,7 +218,7 @@ const Field3D Div_par_fvv(const Field3D& f_in, const Field3D& v_in,
             flux =
                 s.R * sv.R * sv.R
                 + BOUTMAX(wave_speed(i, j, k), fabs(v(i, j, k)), fabs(v(i, j + 1, k)))
-                  * (s.R * sv.R - bndryval * vpar);
+                  * bndryval * (sv.R - vpar);
           }
         } else {
           // Maximum wave speed in the two cells
@@ -247,7 +247,7 @@ const Field3D Div_par_fvv(const Field3D& f_in, const Field3D& v_in,
             flux =
                 s.L * sv.L * sv.L
                 - BOUTMAX(wave_speed(i, j, k), fabs(v(i, j, k)), fabs(v(i, j - 1, k)))
-                  * (s.L * sv.L - bndryval * vpar);
+                  * bndryval * (sv.L - vpar);
           }
         } else {
           // Maximum wave speed in the two cells
