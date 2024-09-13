@@ -139,6 +139,7 @@ type = (evolve_density, evolve_pressure, evolve_momentum,
 charge = 0
 # Neutral mass in amu
 AA = 2
+density_floor = 1e-7
 
 thermal_conduction = true
 # Save variable to file
