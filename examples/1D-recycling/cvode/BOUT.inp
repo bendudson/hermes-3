@@ -48,7 +48,7 @@ ixseps2 = -1
 # the components that they depend on.
 # If this is wrong, you'll get a runtime error (about non-existant variables)
 components = (d+, d, e,
-              sheath_boundary_simple, collisions, recycling, sound_speed, reactions,
+              sheath_boundary_simple, collisions, recycling, reactions,
               electron_force_balance, neutral_parallel_diffusion)
 
 loadmetric = false       # Use Rxy, Bpxy etc?
@@ -77,8 +77,6 @@ upper_y = true
 [neutral_parallel_diffusion]
 dneut = 10   # (B / Bpol)^2 in neutral diffusion terms
 
-[sound_speed]
-electron_dynamics = false
 
 ####################################
 
