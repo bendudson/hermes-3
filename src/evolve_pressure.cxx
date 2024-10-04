@@ -130,6 +130,7 @@ EvolvePressure::EvolvePressure(std::string name, Options& alloptions, Solver* so
       source_prefactor_function = FieldFactory::get()->parse(str, &p_options);
   }
 
+
   if (p_options["source_only_in_core"]
       .doc("Zero the source outside the closed field-line region?")
       .withDefault<bool>(false)) {
@@ -148,6 +149,16 @@ EvolvePressure::EvolvePressure(std::string name, Options& alloptions, Solver* so
   neumann_boundary_average_z = p_options["neumann_boundary_average_z"]
     .doc("Apply neumann boundary with Z average?")
     .withDefault<bool>(false);
+
+  numerical_viscous_heating = options["numerical_viscous_heating"]
+    .doc("Include heating due to numerical viscosity?")
+    .withDefault<bool>(false);
+
+  if (numerical_viscous_heating) {
+    fix_momentum_boundary_flux = options["fix_momentum_boundary_flux"]
+      .doc("Fix Y boundary momentum flux to boundary midpoint value?")
+      .withDefault<bool>(false);
+  }
 }
 
 void EvolvePressure::transform(Options& state) {
@@ -221,6 +232,8 @@ void EvolvePressure::finally(const Options& state) {
 
   T = get<Field3D>(species["temperature"]);
   N = get<Field3D>(species["density"]);
+  
+  Coordinates* coord = mesh->getCoordinates();
 
   if (species.isSet("charge") and (fabs(get<BoutReal>(species["charge"])) > 1e-5) and
       state.isSection("fields") and state["fields"].isSet("phi")) {
@@ -247,7 +260,7 @@ void EvolvePressure::finally(const Options& state) {
 
     if (p_div_v) {
       // Use the P * Div(V) form
-      ddt(P) -= FV::Div_par_mod<hermes::Limiter>(P, V, fastest_wave);
+      ddt(P) -= FV::Div_par_mod<hermes::Limiter>(P, V, fastest_wave, flow_ylow);
 
       // Work done. This balances energetically a term in the momentum equation
       ddt(P) -= (2. / 3) * Pfloor * Div_par(V);
@@ -257,16 +270,25 @@ void EvolvePressure::finally(const Options& state) {
       // Note: A mixed form has been tried (on 1D neon example)
       //       -(4/3)*FV::Div_par(P,V) + (1/3)*(V * Grad_par(P) - P * Div_par(V))
       //       Caused heating of charged species near sheath like p_div_v
-      ddt(P) -= (5. / 3) * FV::Div_par_mod<hermes::Limiter>(P, V, fastest_wave);
+      ddt(P) -= (5. / 3) * FV::Div_par_mod<hermes::Limiter>(P, V, fastest_wave, flow_ylow);
 
       ddt(P) += (2. / 3) * V * Grad_par(P);
     }
+    flow_ylow *= 5. / 2; // Energy flow
 
     if (state.isSection("fields") and state["fields"].isSet("Apar_flutter")) {
       // Magnetic flutter term
       const Field3D Apar_flutter = get<Field3D>(state["fields"]["Apar_flutter"]);
       ddt(P) -= (5. / 3) * Div_n_g_bxGrad_f_B_XZ(P, V, -Apar_flutter);
       ddt(P) += (2. / 3) * V * bracket(P, Apar_flutter, BRACKET_ARAKAWA);
+    }
+
+    if (numerical_viscous_heating) {
+      // Viscous heating coming from numerical viscosity
+      Field3D Nlim = floor(N, density_floor);
+      const BoutReal AA = get<BoutReal>(species["AA"]); // Atomic mass
+      Sp_nvh = (2. / 3) * AA * FV::Div_par_fvv_heating(Nlim, V, fastest_wave, fix_momentum_boundary_flux);
+      ddt(P) += Sp_nvh;
     }
   }
 
@@ -345,7 +367,10 @@ void EvolvePressure::finally(const Options& state) {
 
     // Note: Flux through boundary turned off, because sheath heat flux
     // is calculated and removed separately
-    ddt(P) += (2. / 3) * FV::Div_par_K_Grad_par(kappa_par, T, false);
+    flow_ylow_conduction;
+    conduction_div = (2. / 3) * Div_par_K_Grad_par_mod(kappa_par, T, flow_ylow_conduction, false);
+    ddt(P) += conduction_div;
+    flow_ylow += flow_ylow_conduction;
 
     if (state.isSection("fields") and state["fields"].isSet("Apar_flutter")) {
       // Magnetic flutter term. The operator splits into 4 pieces:
@@ -421,7 +446,7 @@ void EvolvePressure::finally(const Options& state) {
       flow_xlow = get<Field3D>(species["energy_flow_xlow"]);
     }
     if (species.isSet("energy_flow_ylow")) {
-      flow_ylow = get<Field3D>(species["energy_flow_ylow"]);
+      flow_ylow += get<Field3D>(species["energy_flow_ylow"]);
     }
   }
 }
@@ -457,6 +482,15 @@ void EvolvePressure::outputVars(Options& state) {
                       {"long_name", name + " heat conduction coefficient"},
                       {"species", name},
                       {"source", "evolve_pressure"}});
+
+      set_with_attrs(state[std::string("div_cond_par_") + name], conduction_div * 3/2,
+                     {{"time_dimension", "t"},
+                      {"units", "W m^-3"},
+                      {"conversion", Pnorm * Omega_ci},
+                      {"long_name", name + " parallel energy flow divergence due to heat conduction"},
+                      {"species", name},
+                      {"source", "evolve_pressure"}});
+
     }
     set_with_attrs(state[std::string("T") + name], T,
                    {{"time_dimension", "t"},
@@ -510,6 +544,17 @@ void EvolvePressure::outputVars(Options& state) {
                     {"conversion", rho_s0 * SQ(rho_s0) * Pnorm * Omega_ci},
                     {"standard_name", "power"},
                     {"long_name", name + " power through Y cell face. Note: May be incomplete."},
+                    {"species", name},
+                    {"source", "evolve_pressure"}});
+    }
+
+    if (numerical_viscous_heating) {
+      set_with_attrs(state[std::string("SP") + name + std::string("_nvh")], Sp_nvh,
+                   {{"time_dimension", "t"},
+                    {"units", "Pa s^-1"},
+                    {"conversion", Pnorm * Omega_ci},
+                    {"standard_name", "pressure source"},
+                    {"long_name", name + " pressure source from numerical viscous heating"},
                     {"species", name},
                     {"source", "evolve_pressure"}});
     }
