@@ -31,6 +31,11 @@ EvolveEnergy::EvolveEnergy(std::string name, Options& alloptions, Solver* solver
                    .withDefault<bool>(false);
 
   density_floor = options["density_floor"].doc("Minimum density floor").withDefault(1e-5);
+
+  conduction_collisions_mode = options["conduction_collisions_mode"]
+      .doc("Can be legacy: all collisions, or braginskii: self collisions and ie")
+      .withDefault<std::string>("legacy");
+
   if (evolve_log) {
     // Evolve logarithm of energy
     solver->add(logE, std::string("logE") + name);
@@ -256,7 +261,7 @@ void EvolveEnergy::finally(const Options& state) {
       fastest_wave = sqrt(T / AA);
     }
 
-    ddt(E) -= FV::Div_par_mod<hermes::Limiter>(E + P, V, fastest_wave);
+    ddt(E) -= FV::Div_par_mod<hermes::Limiter>(E + P, V, fastest_wave, flow_ylow);
 
     if (state.isSection("fields") and state["fields"].isSet("Apar_flutter")) {
       // Magnetic flutter term
@@ -275,8 +280,84 @@ void EvolveEnergy::finally(const Options& state) {
   // Parallel heat conduction
   if (thermal_conduction) {
 
+    // Collisionality
+    // Braginskii mode: plasma - self collisions and ei, neutrals - CX, IZ
+    if (collision_names.empty()) {     /// Calculate only once - at the beginning
+
+      if (conduction_collisions_mode == "braginskii") {
+        for (const auto& collision : species["collision_frequencies"].getChildren()) {
+
+          std::string collision_name = collision.second.name();
+
+          if (identifySpeciesType(species.name()) == "neutral") {
+            if (/// Charge exchange
+                (collisionSpeciesMatch(    
+                  collision_name, species.name(), "+", "cx", "partial")) or
+                /// Ionisation
+                (collisionSpeciesMatch(    
+                  collision_name, species.name(), "+", "iz", "partial"))) {
+                    collision_names.push_back(collision_name);
+                  }
+
+          } else if (identifySpeciesType(species.name()) == "electron") {
+            if (/// Electron-electron collisions
+                (collisionSpeciesMatch(    
+                  collision_name, species.name(), "e", "coll", "exact"))) {
+                    collision_names.push_back(collision_name);
+                  }
+
+          } else if (identifySpeciesType(species.name()) == "ion") {
+            if (/// Self-collisions
+                (collisionSpeciesMatch(    
+                  collision_name, species.name(), species.name(), "coll", "exact"))) {
+                    collision_names.push_back(collision_name);
+                  }
+          }
+          
+        }
+      // Legacy mode: all collisions and CX are included
+      } else if (conduction_collisions_mode == "legacy") {
+        for (const auto& collision : species["collision_frequencies"].getChildren()) {
+
+          std::string collision_name = collision.second.name();
+
+          if (/// Charge exchange
+              (collisionSpeciesMatch(    
+                collision_name, species.name(), "", "cx", "partial")) or
+              /// Any collision (en, in, ee, ii, nn)
+              (collisionSpeciesMatch(    
+                collision_name, species.name(), "", "coll", "partial"))) {
+                  collision_names.push_back(collision_name);
+                }
+        }
+        
+      } else {
+        throw BoutException("\tconduction_collisions_mode for {:s} must be either legacy or braginskii", species.name());
+      }
+
+      if (collision_names.empty()) {
+        throw BoutException("\tNo collisions found for {:s} in evolve_pressure for selected collisions mode", species.name());
+      }
+
+      /// Write chosen collisions to log file
+      output_info.write("\t{:s} conduction collisionality mode: '{:s}' using ",
+                      species.name(), conduction_collisions_mode);
+      for (const auto& collision : collision_names) {        
+        output_info.write("{:s} ", collision);
+      }
+
+      output_info.write("\n");
+
+      }
+
+    /// Collect the collisionalities based on list of names
+    nu = 0;
+    for (const auto& collision_name : collision_names) {
+      nu += GET_VALUE(Field3D, species["collision_frequencies"][collision_name]);
+    }
+
     // Calculate ion collision times
-    const Field3D tau = 1. / floor(get<Field3D>(species["collision_frequency"]), 1e-10);
+    const Field3D tau = 1. / floor(nu, 1e-10);
     const BoutReal AA = get<BoutReal>(species["AA"]); // Atomic mass
 
     // Parallel heat conduction
@@ -327,7 +408,9 @@ void EvolveEnergy::finally(const Options& state) {
 
     // Note: Flux through boundary turned off, because sheath heat flux
     // is calculated and removed separately
-    ddt(E) += FV::Div_par_K_Grad_par(kappa_par, T, false);
+    Field3D flow_ylow_conduction;
+    ddt(E) += Div_par_K_Grad_par_mod(kappa_par, T, flow_ylow_conduction, false);
+    flow_ylow += flow_ylow_conduction;
 
     if (state.isSection("fields") and state["fields"].isSet("Apar_flutter")) {
       // Magnetic flutter term. The operator splits into 4 pieces:
@@ -390,7 +473,7 @@ void EvolveEnergy::finally(const Options& state) {
       flow_xlow = get<Field3D>(species["energy_flow_xlow"]);
     }
     if (species.isSet("energy_flow_ylow")) {
-      flow_ylow = get<Field3D>(species["energy_flow_ylow"]);
+      flow_ylow += get<Field3D>(species["energy_flow_ylow"]);
     }
   }
 }

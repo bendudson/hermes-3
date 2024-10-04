@@ -79,6 +79,9 @@ private:
   bool neumann_boundary_average_z; ///< Apply neumann boundary with Z average?
   bool poloidal_flows;
   bool thermal_conduction;    ///< Include thermal conduction?
+  std::vector<std::string> collision_names; ///< Collisions used for collisionality
+  std::string conduction_collisions_mode;  ///< Collision selection, either legacy or braginskii
+  Field3D nu;   ///< Collision frequency for conduction
   BoutReal kappa_coefficient; ///< Leading numerical coefficient in parallel heat flux calculation
   BoutReal kappa_limit_alpha; ///< Flux limit if >0
 
@@ -96,6 +99,8 @@ private:
 
   Field3D kappa_par; ///< Parallel heat conduction coefficient
 
+  Field3D conduction_div; ///< Divergence of heat conduction flux
+
   Field3D source, final_source; ///< External pressure source
   Field3D Sp;     ///< Total pressure source
   FieldGeneratorPtr source_prefactor_function;
@@ -109,6 +114,11 @@ private:
   BoutReal time_normalisation; ///< Normalisation factor [s]
   bool source_time_dependent; ///< Is the input source time dependent?
   Field3D flow_xlow, flow_ylow; ///< Energy flow diagnostics
+  Field3D flow_ylow_conduction; ///< Conduction energy flow diagnostics
+
+  bool numerical_viscous_heating; ///< Include heating due to numerical viscosity?
+  bool fix_momentum_boundary_flux; ///< Fix momentum flux to boundary condition?
+  Field3D Sp_nvh; ///< Pressure source due to artificial viscosity
 };
 
 namespace {
