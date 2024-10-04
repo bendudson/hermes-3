@@ -76,6 +76,7 @@ upper_y = true
 
 [neutral_parallel_diffusion]
 dneut = 10   # (B / Bpol)^2 in neutral diffusion terms
+diffusion_collisions_mode = afn   # Use CX, IZ collision frequencies
 
 
 ####################################
@@ -89,6 +90,7 @@ noflow_upper_y = false  # Sheath boundary at upper y
 
 charge = 1
 AA = 2 # atomic mass number in amu
+conduction_collisions_mode = braginskii  # Use ii only
 
 # Density controller will force the upstream density towards this value
 density_upstream = 1e19  # Upstream density [m^-3]
@@ -138,7 +140,8 @@ type = (evolve_density, evolve_pressure, evolve_momentum,
 charge = 0
 # Neutral mass in amu
 AA = 2
-density_floor = 1e-7
+conduction_collisions_mode = braginskii  # Use ii only
+density_floor = 1e-7  # 1e-5 was being hit in this example
 
 thermal_conduction = true
 # Save variable to file
@@ -163,7 +166,7 @@ noflow_upper_y = false
 
 charge = -1
 AA = 1/1836 # Electron mass in amu
-
+conduction_collisions_mode = braginskii  # Use ii only
 thermal_conduction = true  # in evolve_pressure
 diagnose = true
 

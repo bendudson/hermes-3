@@ -69,9 +69,10 @@ atol = 1e-7
 rtol = 1e-5
 
 [sheath_boundary_simple]
-# Set a sheath boundary condition at which the ends of the field-line
 lower_y = false
 upper_y = true
+gamma_i = 2.5
+gamma_e = 4.5
 
 [neutral_parallel_diffusion]
 dneut = 10   # (B / Bpol)^2 in neutral diffusion terms
