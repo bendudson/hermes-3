@@ -9,6 +9,9 @@
 
 #include <bout/vector2d.hxx>
 
+/// Neutral gas model, evolving three components of velocity as axisymmetric fields
+///
+/// Evolves neutral density, pressure and velocity as Field2D quantities
 struct NeutralFullVelocity : public Component {
   NeutralFullVelocity(const std::string& name, Options& options, Solver *solver);
   
@@ -56,5 +59,9 @@ private:
   // Outflowing boundaries for neutrals
   bool outflow_ydown; // Allow neutral outflows?
 };
+
+namespace {
+RegisterComponent<NeutralFullVelocity> registersolverfullvelocity("full_velocity");
+}
 
 #endif // FULL_VELOCITY_H
