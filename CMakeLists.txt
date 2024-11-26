@@ -245,6 +245,25 @@ if(HERMES_TESTS)
     add_test(NAME hermes_unit_tests COMMAND hermes_unit_tests)
     target_link_libraries(hermes_unit_tests PRIVATE gtest bout++::bout++ hermes-3-lib)
   endif()
+  
+# Method of manufactured solutions (MMS) tests
+  option(HERMES_DIVOPS_MMS_TESTS "Build the differential operator MMS tests" ON)
+  if(HERMES_DIVOPS_MMS_TESTS)
+    if(NOT PACKAGE_TESTS)
+      # Not running BOUT++ tests
+      # Since BOUT++ includes googletest, adding it again causes errors
+      set(CMAKE_CXX_STANDARD 14) # Needed to compile GoogleTest on Darwin
+      # add_subdirectory(external/googletestmms)
+    endif()
+    file(GLOB_RECURSE TEST_SOURCES tests/mms/test_*.cxx)
+
+    add_executable(hermes_mms_tests
+                   tests/mms/main.cxx
+                   ${TEST_SOURCES})
+
+    add_test(NAME hermes_mms_tests COMMAND hermes_mms_tests)
+    target_link_libraries(hermes_mms_tests PRIVATE gtest bout++::bout++ hermes-3-lib)
+  endif()
 endif()
 
 # Compile-time options
