@@ -91,14 +91,9 @@ private:
 
   Field3D wall_potential; ///< Voltage of the wall. Normalised units.
 
-  bool diagnose; // Save additional diagnostics?
+  bool no_flow; ///< No flow speed, only remove energy
 
-  Field3D hflux_e;  // Electron heat flux through sheath
-  Field3D phi; // Phi at sheath
-  Field3D ion_sum; // Sum of ion current at sheath
-
-  Options diagnostics;   // Options object to store diagnostic fields like a dict
-
+  BoutReal density_boundary_mode, pressure_boundary_mode, temperature_boundary_mode; ///< BC mode: 0=LimitFree, 1=ExponentialFree, 2=LinearFree
 };
 
 namespace {
