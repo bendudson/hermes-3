@@ -115,11 +115,11 @@ int main(int argc, char** argv) {
 
     Options dump;
     Field3D R{mesh}, Z{mesh};
-    mesh->get(R, "R", 0.0, false);
-    mesh->get(Z, "Z", 0.0, false);
+    mesh->get(R, "Rxy", 0.0, false);
+    mesh->get(Z, "Zxy", 0.0, false);
 
-    dump["R"] = R;
-    dump["Z"] = Z;
+    // dump["R_3d"] = R;
+    // dump["Z_3d"] = Z;
 
 
     auto coord = mesh->getCoordinates();
