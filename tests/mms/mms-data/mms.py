@@ -120,8 +120,10 @@ def doit(path):
     s = slice(2, -2), slice(None), slice(None)
     datasets = []
 
-    bdataset = open_boutdataset('BOUT.mesh_0.0.nc', inputfilepath='BOUT.inp', geometry="toroidal",gridfilepath='circ_grid_0.nc',keep_yboundaries=False, is_mms_dump=True)
-    Rs = []
+    # open the series of "BOUT.mesh_{m}.0.nc" files, 
+    # saving them in a list `datasets`
+    # and stop when no further files are found
+    # save the counter variable `m`
     m = 0
     while 1:
         try:
@@ -129,75 +131,83 @@ def doit(path):
             m += 1
         except OSError:
             break
-    mids = range(m)
-    Zs = [collectvar(datasets, "Z", m) for m in mids]
-    Rs = [collectvar(datasets, "R", m) for m in mids]
-    assert len(Rs) == len(Zs)
+    # create a range from the number of files found
+    nmesh = m
+    meshrange = range(nmesh)
+
+    # for each file, extract Z and R variables from
+    # the previously saved datasets
+    Zs = [collectvar(datasets, "Z", m) for m in meshrange]
+    Rs = [collectvar(datasets, "R", m) for m in meshrange]
+    
+    # check that more than one dataset is supplied for the test
     assert len(Rs) > 1
     toplot = []
-    mmax = 0
+
+    # count the number of output variables in the BOUT.mesh_0.0.nc dataset
+    # retain this variable `nvariable` to use in the loop over functions below
+    nvariable = 0
     while 1:
         try:
-            collectvar(datasets, f"out_{mmax}")
+            collectvar(datasets, f"out_{nvariable}")
         except KeyError:
             break
-        mmax += 1
-    print(f"Checking {mmax} variables for {len(Zs)} meshes in dir {path}")
+        nvariable += 1
+    print(f"Checking {nvariable} variables for {nmesh} meshes in dir {path}")
 
     def defdiclist():
         return collections.defaultdict(list)
-
+    nvariable = 1
     out = collections.defaultdict(lambda: collections.defaultdict(list))
-    for i in list(range(mmax)):
-        l2 = []
-        lst = []
-        for m in mids:
+    for i in range(nvariable):
+        l2norm = []
+        nylist = []
+        for m in meshrange:
             o = collectvar(datasets, f"out_{i}", m)
-            #print(o.attrs)
             attrs = o.attrs
             ops, inp = attrs["operator"], attrs["inp"]
             a = get_ana(ops, inp)(Rs[m], Zs[m])
             e = (o - a)[s]
-            if "dagp_fv" in ops and 0:
-                f, axs = plt.subplots(1, 3)
-                s2 = slice(2, -2, None), 0, slice(None)
-                print([x.shape for x in [Rs[m][s2], Zs[m][s2], o[s2]]])
-                ax = axs[0]
-                p = ax.pcolormesh(Rs[m][s2], Zs[m][s2], o[s2])
-                ax.set_title(f"{inp} {ops} output[s2]")
-                plt.colorbar(p, ax=ax)
-                ax = axs[1]
-                p = ax.pcolormesh(Rs[m][s2], Zs[m][s2], a[s2])
-                ax.set_title(f"{inp} {ops} analytic[s2]")
-                plt.colorbar(p, ax=ax)
-                ax = axs[2]
-                emax = np.max(np.abs((o - a)[s2]))
-                p = ax.pcolormesh(
-                    Rs[m][s2],
-                    Zs[m][s2],
-                    (o - a)[s2],
-                    cmap=plt.get_cmap("bwr"),
-                    vmax=emax,
-                    vmin=-emax,
-                )
-                ax.set_title(f"{inp} {ops} error[s2]")
-                plt.colorbar(p, ax=ax)
+            #if "dagp_fv" in ops and 0:
+            #    f, axs = plt.subplots(1, 3)
+            #    s2 = slice(2, -2, None), 0, slice(None)
+            #    print([x.shape for x in [Rs[m][s2], Zs[m][s2], o[s2]]])
+            #    ax = axs[0]
+            #    p = ax.pcolormesh(Rs[m][s2], Zs[m][s2], o[s2])
+            #    ax.set_title(f"{inp} {ops} output[s2]")
+            #    plt.colorbar(p, ax=ax)
+            #    ax = axs[1]
+            #    p = ax.pcolormesh(Rs[m][s2], Zs[m][s2], a[s2])
+            #    ax.set_title(f"{inp} {ops} analytic[s2]")
+            #    plt.colorbar(p, ax=ax)
+            #    ax = axs[2]
+            #    emax = np.max(np.abs((o - a)[s2]))
+            #    p = ax.pcolormesh(
+            #        Rs[m][s2],
+            #        Zs[m][s2],
+            #        (o - a)[s2],
+            #        cmap=plt.get_cmap("bwr"),
+            #        vmax=emax,
+            #        vmin=-emax,
+            #    )
+            #    ax.set_title(f"{inp} {ops} error[s2]")
+            #    plt.colorbar(p, ax=ax)
 
             thisl2 = np.sqrt(np.mean(e**2))
-            l2.append(thisl2)
+            l2norm.append(thisl2)
             out[inp][ops].append(thisl2)
-#            print(Rs[m])
-            lst.append(Rs[m].shape[1])
+            nylist.append(Rs[m].shape[1])
+        
         if not np.any(a):
             print(ops, inp)
             continue
-        plt.show()
+        #plt.show()
 
         ord = []
-        for i0 in range(len(l2) - 1):
-            a, b = lst[i0 : i0 + 2]
+        for i0 in range(len(l2norm) - 1):
+            a, b = nylist[i0 : i0 + 2]
             dx = b / a
-            a, b = l2[i0 : i0 + 2]
+            a, b = l2norm[i0 : i0 + 2]
             de = a / b
             ord += [np.log(de) / np.log(dx)]
         if not np.isclose(
@@ -215,19 +225,19 @@ def doit(path):
         print(
             state,
             i,
-            np.array(l2),
+            np.array(l2norm),
             np.array(ord),
             {k: v for k, v in attrs.items() if "_" not in k and v},
         )
 
-        toplot.append((attrs["inp"], attrs["operator"], lst, l2))
+        toplot.append((attrs["inp"], attrs["operator"], nylist, l2norm))
         label = f'{attrs["inp"]} {attrs["operator"]}'
         with open(f"result_real_{i}.txt", "w") as f:
             f.write("real\n")
             f.write(f"{label}\n")
-            f.write(" ".join([str(x) for x in lst]))
+            f.write(" ".join([str(x) for x in nylist]))
             f.write("\n")
-            f.write(" ".join([str(x) for x in l2]))
+            f.write(" ".join([str(x) for x in l2norm]))
             f.write("\n")
     toplot2 = dict()
     for a, b, c, d in toplot:
@@ -239,7 +249,7 @@ def doit(path):
     out = {k: dict(v) for k, v in out.items()}
     #with open(f"{path}/l2_data.pkl", "wb") as f:
     #    pickle.dump(out, f, pickle.HIGHEST_PROTOCOL)
-    if 0:
+    if 1:
         for k, vs in toplot2.items():
             plt.figure()
             for ab, c, d in vs:
@@ -252,6 +262,8 @@ def doit(path):
 
 
 if __name__ == "__main__":
+    # to run in the present directory
+    # $ python3 mms.py ./
     print(sys.argv)
     if sys.argv[1:]:
         args = sys.argv[1:]
