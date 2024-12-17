@@ -10,7 +10,7 @@ ShiftWithoutTwist=false
 MYG=1
 MXG=2
 
-grid = "mms-data/circ_grid_0.nc"
+grid = "tests/mms/mms-data/circ_grid_0.nc"
 
 NXPE=1
 
@@ -23,12 +23,12 @@ extrapolate_y = false
 
 
 [mesh_0]
-file = "mms-data/circ_grid_0.nc"
+file = "tests/mms/mms-data/circ_grid_0.nc"
 symmetricGlobalX = false
 extrapolate_y = false
 
 [mesh_1]
-file = "mms-data/circ_grid_1.nc"
+file = "tests/mms/mms-data/circ_grid_1.nc"
 symmetricGlobalX = false
 extrapolate_y = false
 

@@ -1,4 +1,6 @@
-from boutdata import collect as boutcollect
+#from boutdata import collect as boutcollect
+
+from xbout import open_boutdataset
 import numpy as np
 import matplotlib.pyplot as plt
 import sys
@@ -19,11 +21,10 @@ failed = collections.defaultdict(list)
 failed2 = set()
 
 
-def collect(path, var, mesh=0):
-    print(var, path, mesh)
-    return boutcollect(
-        var, path=path, prefix=f"BOUT.mesh_{mesh}", strict=True, info=False
-    )
+def collectvar(datasets, var, mesh=0):
+    #print(var, mesh)
+    #print(datasets[mesh][var])
+    return datasets[mesh][var]
 
 def collectgrid(path, var, mesh=0):
     print(var, path, mesh)
@@ -117,25 +118,28 @@ def doit(path):
             raise RuntimeError("bout++ failed")
 
     s = slice(2, -2), slice(None), slice(None)
+    datasets = []
 
+    bdataset = open_boutdataset('BOUT.mesh_0.0.nc', inputfilepath='BOUT.inp', geometry="toroidal",gridfilepath='circ_grid_0.nc',keep_yboundaries=False, is_mms_dump=True)
     Rs = []
     m = 0
     while 1:
         try:
-            Rs += [collectgrid(path, "Rxy", m)]
+            datasets += [ open_boutdataset(f'BOUT.mesh_{m}.0.nc', inputfilepath='BOUT.inp', geometry="toroidal",gridfilepath=f'circ_grid_{m}.nc',keep_yboundaries=False, is_mms_dump=True) ]
             m += 1
         except OSError:
             break
     mids = range(m)
-    Zs = [collectgrid(path, "Zxy", m) for m in mids]
+    Zs = [collectvar(datasets, "Z", m) for m in mids]
+    Rs = [collectvar(datasets, "R", m) for m in mids]
     assert len(Rs) == len(Zs)
     assert len(Rs) > 1
     toplot = []
     mmax = 0
     while 1:
         try:
-            collect(path, f"out_{mmax}")
-        except ValueError:
+            collectvar(datasets, f"out_{mmax}")
+        except KeyError:
             break
         mmax += 1
     print(f"Checking {mmax} variables for {len(Zs)} meshes in dir {path}")
@@ -148,8 +152,9 @@ def doit(path):
         l2 = []
         lst = []
         for m in mids:
-            o = collect(path, f"out_{i}", m)
-            attrs = o.attributes
+            o = collectvar(datasets, f"out_{i}", m)
+            #print(o.attrs)
+            attrs = o.attrs
             ops, inp = attrs["operator"], attrs["inp"]
             a = get_ana(ops, inp)(Rs[m], Zs[m])
             e = (o - a)[s]
@@ -181,7 +186,8 @@ def doit(path):
             thisl2 = np.sqrt(np.mean(e**2))
             l2.append(thisl2)
             out[inp][ops].append(thisl2)
-            lst.append(Rs[m].shape[2])
+#            print(Rs[m])
+            lst.append(Rs[m].shape[1])
         if not np.any(a):
             print(ops, inp)
             continue
@@ -231,8 +237,8 @@ def doit(path):
         toplot2[a].append((b, c, d))
         # toplot2[b].append((a, c, d))
     out = {k: dict(v) for k, v in out.items()}
-    with open(f"{path}/l2_data.pkl", "wb") as f:
-        pickle.dump(out, f, pickle.HIGHEST_PROTOCOL)
+    #with open(f"{path}/l2_data.pkl", "wb") as f:
+    #    pickle.dump(out, f, pickle.HIGHEST_PROTOCOL)
     if 0:
         for k, vs in toplot2.items():
             plt.figure()
