@@ -1,5 +1,3 @@
-#from boutdata import collect as boutcollect
-
 from xbout import open_boutdataset
 import numpy as np
 import matplotlib.pyplot as plt
@@ -22,15 +20,7 @@ failed2 = set()
 
 
 def collectvar(datasets, var, mesh=0):
-    #print(var, mesh)
-    #print(datasets[mesh][var])
     return datasets[mesh][var]
-
-def collectgrid(path, var, mesh=0):
-    print(var, path, mesh)
-    return boutcollect(
-        var, path=path, prefix=f"guards_grid_{mesh}", strict=True, info=False
-    )
 
 def r_func(R, Z):
     R0 = 5
@@ -111,12 +101,7 @@ def get_ana(method, func):
 
 
 def doit(path):
-    if 0:
-        r = os.system(f"build-cont-opt/hermes-mms -d {path} -q -q -q")
-        if r:
-            os.system(f"build-cont-opt/hermes-mms -d {path}")
-            raise RuntimeError("bout++ failed")
-
+    
     s = slice(2, -2), slice(None), slice(None)
     datasets = []
 
@@ -168,30 +153,6 @@ def doit(path):
             ops, inp = attrs["operator"], attrs["inp"]
             a = get_ana(ops, inp)(Rs[m], Zs[m])
             e = (o - a)[s]
-            #if "dagp_fv" in ops and 0:
-            #    f, axs = plt.subplots(1, 3)
-            #    s2 = slice(2, -2, None), 0, slice(None)
-            #    print([x.shape for x in [Rs[m][s2], Zs[m][s2], o[s2]]])
-            #    ax = axs[0]
-            #    p = ax.pcolormesh(Rs[m][s2], Zs[m][s2], o[s2])
-            #    ax.set_title(f"{inp} {ops} output[s2]")
-            #    plt.colorbar(p, ax=ax)
-            #    ax = axs[1]
-            #    p = ax.pcolormesh(Rs[m][s2], Zs[m][s2], a[s2])
-            #    ax.set_title(f"{inp} {ops} analytic[s2]")
-            #    plt.colorbar(p, ax=ax)
-            #    ax = axs[2]
-            #    emax = np.max(np.abs((o - a)[s2]))
-            #    p = ax.pcolormesh(
-            #        Rs[m][s2],
-            #        Zs[m][s2],
-            #        (o - a)[s2],
-            #        cmap=plt.get_cmap("bwr"),
-            #        vmax=emax,
-            #        vmin=-emax,
-            #    )
-            #    ax.set_title(f"{inp} {ops} error[s2]")
-            #    plt.colorbar(p, ax=ax)
 
             thisl2 = np.sqrt(np.mean(e**2))
             l2norm.append(thisl2)
@@ -201,7 +162,6 @@ def doit(path):
         if not np.any(a):
             print(ops, inp)
             continue
-        #plt.show()
 
         ord = []
         for i0 in range(len(l2norm) - 1):
