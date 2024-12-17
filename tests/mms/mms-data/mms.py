@@ -127,7 +127,7 @@ def doit(path):
     
     # check that more than one dataset is supplied for the test
     assert len(Rs) > 1
-    toplot = []
+    plot_data = dict()
 
     # count the number of output variables in the BOUT.mesh_0.0.nc dataset
     # retain this variable `nvariable` to use in the loop over functions below
@@ -189,8 +189,8 @@ def doit(path):
             np.array(ord),
             {k: v for k, v in attrs.items() if "_" not in k and v},
         )
-
-        toplot.append((attrs["inp"], attrs["operator"], nylist, l2norm))
+        plot_data[attrs["inp"]] = []
+        plot_data[attrs["inp"]].append((attrs["operator"], nylist, l2norm))
         label = f'{attrs["inp"]} {attrs["operator"]}'
         with open(f"result_real_{i}.txt", "w") as f:
             f.write("real\n")
@@ -199,22 +199,16 @@ def doit(path):
             f.write("\n")
             f.write(" ".join([str(x) for x in l2norm]))
             f.write("\n")
-    toplot2 = dict()
-    for a, b, c, d in toplot:
-        toplot2[a] = []
-        # toplot2[b] = []
-    for a, b, c, d in toplot:
-        toplot2[a].append((b, c, d))
-        # toplot2[b].append((a, c, d))
+    
     out = {k: dict(v) for k, v in out.items()}
     #with open(f"{path}/l2_data.pkl", "wb") as f:
     #    pickle.dump(out, f, pickle.HIGHEST_PROTOCOL)
     if 1:
-        for k, vs in toplot2.items():
+        for key, variable_set in plot_data.items():
             plt.figure()
-            for ab, c, d in vs:
-                plt.plot(c, d, "x-", label=ab)
-            plt.title(k)
+            for label, xaxis, yaxis in variable_set:
+                plt.plot(xaxis, yaxis, "x-", label=label)
+            plt.title(key)
             plt.legend()
             plt.gca().set_yscale("log")
             plt.gca().set_xscale("log")
