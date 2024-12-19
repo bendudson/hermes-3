@@ -32,6 +32,11 @@ file = "tests/mms/mms-data/circ_grid_1.nc"
 symmetricGlobalX = false
 extrapolate_y = false
 
+[mesh_2]
+file = "tests/mms/mms-data/circ_grid_2.nc"
+symmetricGlobalX = false
+extrapolate_y = false
+
 [field_0]
 function = sin(R)
 
