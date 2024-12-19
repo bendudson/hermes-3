@@ -88,7 +88,7 @@ ana["FCI::dagp(f)"] = ana["FCI::Div_a_Grad_perp(a, f)"]
 ana["FCI::dagp_fv(f)"] = ana["FCI::Div_a_Grad_perp(a, f)"]
 
 
-def get_ana(method, func):
+def get_analytical(method, func):
     try:
         dic = ana[method]
     except KeyError:
@@ -127,7 +127,6 @@ def divops_manufactured_solutions_test(path):
     # the previously saved datasets
     Zs = [collectvar(datasets, "Z", m) for m in meshrange]
     Rs = [collectvar(datasets, "R", m) for m in meshrange]
-    
     # check that more than one dataset is supplied for the test
     assert len(Rs) > 1
     plot_data = dict()
@@ -151,21 +150,23 @@ def divops_manufactured_solutions_test(path):
         l2norm = []
         nylist = []
         for m in meshrange:
-            o = collectvar(datasets, f"out_{i}", m)
-            attrs = o.attrs
+            numerical = collectvar(datasets, f"out_{i}", m)
+            print(numerical)
+            attrs = numerical.attrs
             ops, inp = attrs["operator"], attrs["inp"]
-            a = get_ana(ops, inp)(Rs[m], Zs[m])
-            e = (o - a)[s]
+            print(ops)
+            print(inp)
+            print(get_analytical(ops, inp))
+            analytical = get_analytical(ops, inp)(Rs[m], Zs[m])
+            print(analytical)
+            error_values = (numerical - analytical)[s]
+            print(error_values)
 
-            thisl2 = np.sqrt(np.mean(e**2))
+            thisl2 = np.sqrt(np.mean(error_values**2))
             l2norm.append(thisl2)
             out[inp][ops].append(thisl2)
             nylist.append(Rs[m].shape[1])
         
-        if not np.any(a):
-            print(ops, inp)
-            continue
-
         ord = []
         for i0 in range(len(l2norm) - 1):
             a, b = nylist[i0 : i0 + 2]
