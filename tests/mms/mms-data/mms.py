@@ -100,7 +100,7 @@ def get_ana(method, func):
         raise
 
 
-def doit(path):
+def divops_manufactured_solutions_test(path):
     
     s = slice(2, -2), slice(None), slice(None)
     datasets = []
@@ -112,7 +112,10 @@ def doit(path):
     m = 0
     while 1:
         try:
-            datasets += [ open_boutdataset(f'BOUT.mesh_{m}.0.nc', inputfilepath='BOUT.inp', geometry="toroidal",gridfilepath=f'circ_grid_{m}.nc',keep_yboundaries=False, is_mms_dump=True) ]
+            boutmeshpath = path+"/"+f'BOUT.mesh_{m}.0.nc'
+            boutinppath = path+"/"+'BOUT.inp'
+            gridpath = path+"/"+f'circ_grid_{m}.nc'
+            datasets += [ open_boutdataset(boutmeshpath, inputfilepath=boutinppath, geometry="toroidal",gridfilepath=gridpath,keep_yboundaries=False, is_mms_dump=True) ]
             m += 1
         except OSError:
             break
@@ -226,7 +229,7 @@ if __name__ == "__main__":
     print(args)
     for p in args:
         print(p)
-        doit(p)
+        divops_manufactured_solutions_test(p)
 
     if failed:
         print(failed)
