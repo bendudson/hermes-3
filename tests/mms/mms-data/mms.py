@@ -6,7 +6,10 @@ import os
 import collections
 import glob
 import pickle
+from scipy.optimize import curve_fit
 
+def lin_func(x,b,a):
+    return b*x + a
 
 def get_convergence(method):
     return 2
@@ -102,6 +105,8 @@ def get_analytical(method, func):
 
 def divops_manufactured_solutions_test(path):
     
+    # does this slice avoid including guard cells in the test?
+    # is this required for periodic geometries?
     s = slice(2, -2), slice(None), slice(None)
     datasets = []
 
@@ -149,33 +154,45 @@ def divops_manufactured_solutions_test(path):
     for i in range(nvariable):
         l2norm = []
         nylist = []
+        dylist = []
         for m in meshrange:
             numerical = collectvar(datasets, f"out_{i}", m)
-            print(numerical)
+            #print(numerical)
             attrs = numerical.attrs
             ops, inp = attrs["operator"], attrs["inp"]
-            print(ops)
-            print(inp)
-            print(get_analytical(ops, inp))
+            #print(ops)
+            #print(inp)
+            #print(get_analytical(ops, inp))
             analytical = get_analytical(ops, inp)(Rs[m], Zs[m])
-            print(analytical)
+            #print(analytical)
             error_values = (numerical - analytical)[s]
-            print(error_values)
+            #print(error_values)
 
             thisl2 = np.sqrt(np.mean(error_values**2))
             l2norm.append(thisl2)
             out[inp][ops].append(thisl2)
             nylist.append(Rs[m].shape[1])
+            # proxy for grid spacing
+            dylist.append(1.0/Rs[m].shape[1])
         
-        ord = []
-        for i0 in range(len(l2norm) - 1):
-            a, b = nylist[i0 : i0 + 2]
-            dx = b / a
-            a, b = l2norm[i0 : i0 + 2]
-            de = a / b
-            ord += [np.log(de) / np.log(dx)]
+        # cast lists as numpy arrays for further manipulation
+        l2norm = np.array(l2norm)
+        nylist = np.array(nylist)
+        dylist = np.array(dylist)
+
+        # find linear fit coefficients to test convergence rate
+        # and construct fit function for plotting
+        logl2norm = np.log(l2norm)
+        logdylist = np.log(dylist)
+        outvals = curve_fit(lin_func,logdylist,logl2norm)
+        coeffs = outvals[0]
+        slope = coeffs[0] # also the convergence order
+        offset = coeffs[1]
+        logfit = slope*logdylist + offset
+        fitfunc = np.exp(logfit)
+        
         if not np.isclose(
-            ord[-1], get_convergence(attrs["operator"]), atol=0.25, rtol=0
+            slope, get_convergence(attrs["operator"]), atol=0.25, rtol=0
         ):
             state = "❌"
 
@@ -190,11 +207,11 @@ def divops_manufactured_solutions_test(path):
             state,
             i,
             np.array(l2norm),
-            np.array(ord),
+            slope,
             {k: v for k, v in attrs.items() if "_" not in k and v},
         )
         plot_data[attrs["inp"]] = []
-        plot_data[attrs["inp"]].append((attrs["operator"], nylist, l2norm))
+        plot_data[attrs["inp"]].append((attrs["operator"], dylist, l2norm, fitfunc, slope, offset))
         label = f'{attrs["inp"]} {attrs["operator"]}'
         with open(f"result_real_{i}.txt", "w") as f:
             f.write("real\n")
@@ -210,9 +227,12 @@ def divops_manufactured_solutions_test(path):
     if 1:
         for key, variable_set in plot_data.items():
             plt.figure()
-            for label, xaxis, yaxis in variable_set:
-                plt.plot(xaxis, yaxis, "x-", label=label)
-            plt.title(key)
+            for label, xaxis, yaxis, fit, slope, offset in variable_set:
+                plt.plot(xaxis, yaxis, "x-", label="$\\epsilon(\\mathcal{L}\\ast f)$: "+label)
+                plt.plot(xaxis, yaxis[0]*(xaxis/xaxis[0])**2, "x-", label="$\\Delta^2$")
+                plt.plot(xaxis, fit, "x-", label="$e^{{{:.2f}}}\\Delta^{{{:.2f}}}$".format(offset,slope))
+            plt.xlabel("$\\Delta = 1/N_y$")
+            plt.title("$f$: "+key)
             plt.legend()
             plt.gca().set_yscale("log")
             plt.gca().set_xscale("log")
