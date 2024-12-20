@@ -167,39 +167,40 @@ int main(int argc, char** argv) {
      // }
      // ////
     }
-
-    for (const auto &func : functions2) {
-      auto a = std::get<0>(func).func(R, Z);
-      auto f = std::get<1>(func).func(R, Z);
-      mesh->communicate(a, f);
-      a.applyParallelBoundary("parallel_neumann_o2");
-      f.applyParallelBoundary("parallel_neumann_o2");
-      {
-        const auto outname = fmt::format("out_{}", i++);
-        dump[outname] =
-            sqrt(coord->g_22) / coord->J * bracket(a, f, BRACKET_ARAKAWA);
-        const auto opname = "bracket(a, f)";
-        dump[outname].setAttributes({
-            {"operator", opname},
-            {"a", std::get<0>(func).name},
-            {"f", std::get<1>(func).name},
-            {"inp", fmt::format("{}, {}", std::get<0>(func).name,
-                                std::get<1>(func).name)},
-        });
-      }
-      {
-        const auto outname = fmt::format("out_{}", i++);
-        dump[outname] =
-            sqrt(coord->g_22) / coord->J * bracket(a, f, BRACKET_ARAKAWA_OLD);
-        const auto opname = "bracket(a, f, OLD)";
-        dump[outname].setAttributes({
-            {"operator", opname},
-            {"a", std::get<0>(func).name},
-            {"f", std::get<1>(func).name},
-            {"inp", fmt::format("{}, {}", std::get<0>(func).name,
-                                std::get<1>(func).name)},
-        });
-      }
+   // Poisson bracket test, commented out for now
+   // for (const auto &func : functions2) {
+   //   auto a = std::get<0>(func).func(R, Z);
+   //   auto f = std::get<1>(func).func(R, Z);
+   //   mesh->communicate(a, f);
+   //   a.applyParallelBoundary("parallel_neumann_o2");
+   //   f.applyParallelBoundary("parallel_neumann_o2");
+   //   {
+   //     const auto outname = fmt::format("out_{}", i++);
+   //     dump[outname] =
+   //         sqrt(coord->g_22) / coord->J * bracket(a, f, BRACKET_ARAKAWA);
+   //     const auto opname = "bracket(a, f)";
+   //     dump[outname].setAttributes({
+   //         {"operator", opname},
+   //         {"a", std::get<0>(func).name},
+   //         {"f", std::get<1>(func).name},
+   //         {"inp", fmt::format("{}, {}", std::get<0>(func).name,
+   //                             std::get<1>(func).name)},
+   //     });
+   //   }
+   //   {
+   //     const auto outname = fmt::format("out_{}", i++);
+   //     dump[outname] =
+   //         sqrt(coord->g_22) / coord->J * bracket(a, f, BRACKET_ARAKAWA_OLD);
+   //     const auto opname = "bracket(a, f, OLD)";
+   //     dump[outname].setAttributes({
+   //         {"operator", opname},
+   //         {"a", std::get<0>(func).name},
+   //         {"f", std::get<1>(func).name},
+   //         {"inp", fmt::format("{}, {}", std::get<0>(func).name,
+   //                             std::get<1>(func).name)},
+   //     });
+   //   }
+   // end commented out Poisson bracket test
      // {
      //   const auto outname = fmt::format("out_{}", i++);
      //   dump[outname] = FCI::Div_a_Grad_perp(a, f);
