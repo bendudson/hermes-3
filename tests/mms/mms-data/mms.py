@@ -49,7 +49,7 @@ def sin_theta(R, Z):
 
 ana_default = {
     "R": lambda R, Z: 1 / R,
-    "R²": lambda R, Z: R * 0 + 4,
+    "R²": lambda R, Z: R * R,
     "sin(R)": lambda R, Z: np.cos(R) / R - np.sin(R),
     "sin(10*R)": lambda R, Z: 10 * np.cos(10 * R) / R - 1e2 * np.sin(10 * R),
     "sin(100*R)": lambda R, Z: 100 * np.cos(100 * R) / R - 1e4 * np.sin(100 * R),
@@ -59,16 +59,16 @@ ana_default = {
     "sin(Z*10)": lambda R, Z: -np.sin(Z * 10) * 100,
     "sin(Z*100)": lambda R, Z: -np.sin(Z * 100) * 1e4,
     "sin(Z*1000)": lambda R, Z: -np.sin(Z * 1000) * 1e6,
-    "Z": lambda R, Z: Z * 0,
+    "Z": lambda R, Z: Z,
     "r": r_func,
     "sin(theta)": sin_theta,
 }
 ana = dict()
 ana["bracket(a, f)"] = {
     "R, Z": lambda R, Z: -1 / R,
-    "R, R": lambda R, Z: 0 * R,
-    "Z, R": lambda R, Z: 0 * R,
-    "Z, Z": lambda R, Z: 0 * R,
+    #"R, R": lambda R, Z: 0 * R,
+    #"Z, R": lambda R, Z: 0 * R,
+    #"Z, Z": lambda R, Z: 0 * R,
     "sin(R), sin(Z)": lambda R, Z: -1 / R * np.cos(R) * np.cos(Z),
 }
 for a in 10, 100, 1000:
@@ -77,10 +77,10 @@ for a in 10, 100, 1000:
     )
 ana["bracket(a, f, OLD)"] = ana["bracket(a, f)"]
 ana["FCI::Div_a_Grad_perp(a, f)"] = {
-    "R, Z": lambda R, Z: 0 * R,
-    "R, R": lambda R, Z: 0 * R + 2,
+    #"R, Z": lambda R, Z: 0 * R,
+    #"R, R": lambda R, Z: 0 * R + 2,
     "Z, R": lambda R, Z: Z / R,
-    "Z, Z": lambda R, Z: 0 * Z + 1,
+    #"Z, Z": lambda R, Z: 0 * Z + 1,
     "sin(R), sin(Z)": lambda R, Z: -np.sin(R) * np.sin(Z),
 }
 for a in 10, 100, 1000:
@@ -149,7 +149,7 @@ def divops_manufactured_solutions_test(path):
 
     def defdiclist():
         return collections.defaultdict(list)
-    nvariable = 1
+    nvariable = 10
     out = collections.defaultdict(lambda: collections.defaultdict(list))
     for i in range(nvariable):
         l2norm = []
@@ -182,6 +182,7 @@ def divops_manufactured_solutions_test(path):
 
         # find linear fit coefficients to test convergence rate
         # and construct fit function for plotting
+        # print(l2norm)
         logl2norm = np.log(l2norm)
         logdylist = np.log(dylist)
         outvals = curve_fit(lin_func,logdylist,logl2norm)
@@ -203,16 +204,16 @@ def divops_manufactured_solutions_test(path):
                 failed2.add(ops)
         else:
             state = "✅"
-        print(
-            state,
-            i,
-            np.array(l2norm),
-            slope,
-            {k: v for k, v in attrs.items() if "_" not in k and v},
-        )
-        plot_data[attrs["inp"]] = []
-        plot_data[attrs["inp"]].append((attrs["operator"], dylist, l2norm, fitfunc, slope, offset))
-        label = f'{attrs["inp"]} {attrs["operator"]}'
+        #print(
+        #    state,
+        #    i,
+        #    np.array(l2norm),
+        #    slope,
+        #    {k: v for k, v in attrs.items() if "_" not in k and v},
+        #)
+        # store data in dictionary for later plotting        
+        label = attrs["operator"] + " : f = " + attrs["inp"]
+        plot_data[label] = [attrs["operator"], attrs["inp"], dylist, l2norm, fitfunc, slope, offset]
         with open(f"result_real_{i}.txt", "w") as f:
             f.write("real\n")
             f.write(f"{label}\n")
@@ -224,15 +225,16 @@ def divops_manufactured_solutions_test(path):
     out = {k: dict(v) for k, v in out.items()}
     #with open(f"{path}/l2_data.pkl", "wb") as f:
     #    pickle.dump(out, f, pickle.HIGHEST_PROTOCOL)
+    #print(plot_data)
     if 1:
         for key, variable_set in plot_data.items():
+            (oplabel, inplabel, xaxis, yaxis, fit, slope, offset) = variable_set
             plt.figure()
-            for label, xaxis, yaxis, fit, slope, offset in variable_set:
-                plt.plot(xaxis, yaxis, "x-", label="$\\epsilon(\\mathcal{L}\\ast f)$: "+label)
-                plt.plot(xaxis, yaxis[0]*(xaxis/xaxis[0])**2, "x-", label="$\\Delta^2$")
-                plt.plot(xaxis, fit, "x-", label="$e^{{{:.2f}}}\\Delta^{{{:.2f}}}$".format(offset,slope))
+            plt.plot(xaxis, yaxis, "x-", label="$\\epsilon(\\mathcal{L}\\ast f)$: "+oplabel)
+            plt.plot(xaxis, yaxis[0]*(xaxis/xaxis[0])**2, "x-", label="$\\Delta^2$")
+            plt.plot(xaxis, fit, "x-", label="$e^{{{:.2f}}}\\Delta^{{{:.2f}}}$".format(offset,slope))
             plt.xlabel("$\\Delta = 1/N_y$")
-            plt.title("$f$: "+key)
+            plt.title(key)
             plt.legend()
             plt.gca().set_yscale("log")
             plt.gca().set_xscale("log")
