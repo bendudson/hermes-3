@@ -118,6 +118,10 @@ int main(int argc, char** argv) {
     mesh->get(R, "Rxy", 0.0, false);
     mesh->get(Z, "Zxy", 0.0, false);
 
+    Field3D xx{mesh}, yy{mesh}, zz{mesh};
+    mesh->get(xx, "x_input", 0.0, false);
+    mesh->get(yy, "y_input", 0.0, false);
+    mesh->get(zz, "z_input", 0.0, false);
     // dump["R_3d"] = R;
     // dump["Z_3d"] = Z;
 
@@ -154,77 +158,7 @@ int main(int argc, char** argv) {
             {"inp", func.name},
         });
       }
-     // ////
-     // {
-     //   const auto outname = fmt::format("out_{}", i++);
-     //   dump[outname] = dagp(a, f);
-     //   const auto opname = "FCI::dagp_fv(1, f)";
-     //   dump[outname].setAttributes({
-     //       {"operator", opname},
-     //       {"f", func.name},
-     //       {"inp", func.name},
-     //   });
-     // }
-     // ////
-    }
-   // Poisson bracket test, commented out for now
-   // for (const auto &func : functions2) {
-   //   auto a = std::get<0>(func).func(R, Z);
-   //   auto f = std::get<1>(func).func(R, Z);
-   //   mesh->communicate(a, f);
-   //   a.applyParallelBoundary("parallel_neumann_o2");
-   //   f.applyParallelBoundary("parallel_neumann_o2");
-   //   {
-   //     const auto outname = fmt::format("out_{}", i++);
-   //     dump[outname] =
-   //         sqrt(coord->g_22) / coord->J * bracket(a, f, BRACKET_ARAKAWA);
-   //     const auto opname = "bracket(a, f)";
-   //     dump[outname].setAttributes({
-   //         {"operator", opname},
-   //         {"a", std::get<0>(func).name},
-   //         {"f", std::get<1>(func).name},
-   //         {"inp", fmt::format("{}, {}", std::get<0>(func).name,
-   //                             std::get<1>(func).name)},
-   //     });
-   //   }
-   //   {
-   //     const auto outname = fmt::format("out_{}", i++);
-   //     dump[outname] =
-   //         sqrt(coord->g_22) / coord->J * bracket(a, f, BRACKET_ARAKAWA_OLD);
-   //     const auto opname = "bracket(a, f, OLD)";
-   //     dump[outname].setAttributes({
-   //         {"operator", opname},
-   //         {"a", std::get<0>(func).name},
-   //         {"f", std::get<1>(func).name},
-   //         {"inp", fmt::format("{}, {}", std::get<0>(func).name,
-   //                             std::get<1>(func).name)},
-   //     });
-   //   }
-   // end commented out Poisson bracket test
-     // {
-     //   const auto outname = fmt::format("out_{}", i++);
-     //   dump[outname] = FCI::Div_a_Grad_perp(a, f);
-     //   const auto opname = "FCI::Div_a_Grad_perp(a, f)";
-     //   dump[outname].setAttributes({
-     //       {"operator", opname},
-     //       {"a", std::get<0>(func).name},
-     //       {"f", std::get<1>(func).name},
-     //       {"inp", fmt::format("{}, {}", std::get<0>(func).name,
-     //                           std::get<1>(func).name)},
-     //   });
-     // }
-     // {
-     //   const auto outname = fmt::format("out_{}", i++);
-     //   dump[outname] = dagp(a, f);
-     //   const auto opname = "FCI::dagp_fv(f)";
-     //   dump[outname].setAttributes({
-     //       {"operator", opname},
-     //       {"a", std::get<0>(func).name},
-     //       {"f", std::get<1>(func).name},
-     //       {"inp", fmt::format("{}, {}", std::get<0>(func).name,
-     //                           std::get<1>(func).name)},
-     //   });
-     // }
+     
     }
     if (mesh) {
       mesh->outputVars(dump);
@@ -241,27 +175,6 @@ int main(int argc, char** argv) {
   
   BoutFinalise()    ;
 }
-//   std::vector<Field3D> fields;
-//   fields.resize(static_cast<int>(BoundaryParType::SIZE));
-//   Options dump;
-//   for (int i=0; i< fields.size(); i++){
-//     fields[i] = Field3D{0.0};
-//     mesh->communicate(fields[i]);
-//     for (const auto &bndry_par : mesh->getBoundariesPar(static_cast<BoundaryParType>(i))) {
-//       output.write("{:s} region\n", toString(static_cast<BoundaryParType>(i)));
-//       for (bndry_par->first(); !bndry_par->isDone(); bndry_par->next()) {
-//         fields[i][bndry_par->ind()] += 1;
-//         output.write("{:s} increment\n", toString(static_cast<BoundaryParType>(i)));
-//       }
-//     }
-//     output.write("{:s} done\n", toString(static_cast<BoundaryParType>(i)));
-//     dump[fmt::format("field_{:s}", toString(static_cast<BoundaryParType>(i)))] = fields[i];
-//   }
-
-//   bout::writeDefaultOutputFile(dump);
-
-//   BoutFinalise();
-// }
 
 
 
