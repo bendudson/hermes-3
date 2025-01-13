@@ -6,176 +6,56 @@
 #include "bout/fv_ops.hxx"
 #include "bout/difops.hxx"
 
-std::vector<std::string> getAll(std::string str) {
-  std::vector<std::string> out{};
-  int i = 0;
-  while (true) {
-    std::string section = fmt::format(str, i++);
-
-    output.write("Trying '{}'\n", section);
-    //auto sec = Options::root()[section];
-    //if (sec.getChildren().empty()){
-    if (not Options::root().isSection(section)) {
-      return out;
-    }
-    out.push_back(section);
-  }
-}
-
-class nameandfunc2 {
-public:
-  std::string name;
-  std::function<Field3D(const Field3D&, const Field3D&)> func;
-};
-
-class nameandfunc1 {
-public:
-  std::string name;
-  std::function<Field3D(const Field3D&)> func;
-};
-
-const auto functions = {
-    nameandfunc2{"r", [](const Field3D &R,
-			 const Field3D &Z) { return sqrt(Z*Z + (R-5)*(R-5)); }},
-    nameandfunc2{"sin(theta)", [](const Field3D &R,
-				  const Field3D &Z) { return Z / sqrt(Z*Z + (R-5)*(R-5)); }},
-    nameandfunc2{"R", [](const Field3D &R, const Field3D &Z) { return R; }},
-    nameandfunc2{"R²",
-                 [](const Field3D &R, const Field3D &Z) { return R * R; }},
-    nameandfunc2{"sin(R)",
-                 [](const Field3D &R, const Field3D &Z) { return sin(R); }},
-    nameandfunc2{"sin(Z)",
-                 [](const Field3D &R, const Field3D &Z) { return sin(Z); }},
-    nameandfunc2{
-        "sin(Z)*sin(R)",
-        [](const Field3D &R, const Field3D &Z) { return sin(Z) * sin(R); }},
-    nameandfunc2{"sin(10*R)", [](const Field3D &R,
-                                 const Field3D &Z) { return sin(10 * R); }},
-    nameandfunc2{"sin(100*R)", [](const Field3D &R,
-                                  const Field3D &Z) { return sin(100 * R); }},
-    nameandfunc2{"sin(1000*R)", [](const Field3D &R,
-                                   const Field3D &Z) { return sin(1000 * R); }},
-};
-
-const auto difops = {
-    nameandfunc2{"FV::Div_a_Grad_perp(1, f)",
-                 [](const Field3D &a, const Field3D &f) {
-                   return FV::Div_a_Grad_perp(a, f);
-                 }},
-    nameandfunc2{"Delp2(f)",
-                 [](const Field3D &a, const Field3D &f) { return Delp2(f); }},
-    nameandfunc2{"Laplace(f)",
-                 [](const Field3D &a, const Field3D &f) { return Laplace(f); }},
-    // nameandfunc2{"newDelp2(f)", [] (const Field3D& a, const Field3D& f) {
-    // return newDelp2.apply(f); }}, nameandfunc2("bracket(a, f)", [] (const
-    // Field3D& a, const Field3D& f) { return bracket(a, f); }},
-};
-
-#include <list>
-#include <tuple>
-
-const std::list<std::tuple<nameandfunc2, nameandfunc2>> functions2 = {
-    // const auto functions2 = {
-    {{"R", [](const Field3D &R, const Field3D &Z) { return R; }},
-     {"Z", [](const Field3D &R, const Field3D &Z) { return Z; }}},
-    {{"R", [](const Field3D &R, const Field3D &Z) { return R; }},
-     {"R", [](const Field3D &R, const Field3D &Z) { return R; }}},
-    {{"Z", [](const Field3D &R, const Field3D &Z) { return Z; }},
-     {"Z", [](const Field3D &R, const Field3D &Z) { return Z; }}},
-    {{"Z", [](const Field3D &R, const Field3D &Z) { return Z; }},
-     {"R", [](const Field3D &R, const Field3D &Z) { return R; }}},
-    {{"sin(R)", [](const Field3D &R, const Field3D &Z) { return sin(R); }},
-     {"sin(Z)", [](const Field3D &R, const Field3D &Z) { return sin(Z); }}},
-    {{"sin(R*10)",
-      [](const Field3D &R, const Field3D &Z) { return sin(R * 10); }},
-     {"sin(Z*10)",
-      [](const Field3D &R, const Field3D &Z) { return sin(Z * 10); }}},
-    {{"sin(R*100)",
-      [](const Field3D &R, const Field3D &Z) { return sin(R * 100); }},
-     {"sin(Z*100)",
-      [](const Field3D &R, const Field3D &Z) { return sin(Z * 100); }}},
-    // {{"sin(R*1000)", [] (const Field3D& R, const Field3D& Z) {return
-    // sin(R*1000); }}, {"sin(Z*1000)", [] (const Field3D& R, const Field3D& Z)
-    // {return sin(Z*1000); }}},
-};
-
 int main(int argc, char** argv) {
   BoutInitialise(argc, argv);
 
-  auto meshes = getAll("mesh_{}");
-  auto fields = getAll("field_{}");
+  Mesh* mesh = Mesh::create(&Options::root()["mesh"]);
+  mesh->load();
+
+  Options dump;
+
+  // Note that sticking all the inputs in the [mesh] section is a bit of a hack, but makes
+  // for a more compact input file than using the 'standard' variable-initialisation
+  // routines, which would require a separate section for each variable.
+
+  // Load and save coordinate variables
+  Field3D xx{mesh}, yy{mesh}, zz{mesh};
+  mesh->get(xx, "x_input", 0.0, false);
+  mesh->get(yy, "y_input", 0.0, false);
+  mesh->get(zz, "z_input", 0.0, false);
+  dump["x_input"] = xx;
+  dump["y_input"] = yy;
+  dump["z_input"] = zz;
+
+  // Get coefficient from input file
+  Field3D a{mesh};
+  mesh->get(a, "a", 1.0, false);
+  mesh->communicate(a);
+  dump["a"] = a;
+
+  // Get test variable from input file
+  Field3D f{mesh};
+  mesh->get(f, "f", 0.0, false);
+  mesh->communicate(f);
+  dump["f"] = f;
+
+  // Get expected result from input file
+  Field3D expected_result{mesh};
+  mesh->get(expected_result, "expected_result", 0.0, false);
+  dump["expected_result"] = expected_result;
+
+  Field3D result = FV::Div_a_Grad_perp(a, f);
+  dump["result"] = result;
+    
+  mesh->outputVars(dump);
+
+  std::string outname = fmt::format(
+      "{}/BOUT.{}.nc",
+      Options::root()["datadir"].withDefault<std::string>("data"), BoutComm::rank());
   
-  output.write("Found {:d} meshes and {:d} fields", meshes.size(), fields.size());
-  for (const auto& meshname: meshes) {
-    Mesh* mesh = Mesh::create(&Options::root()[meshname]);
-    mesh->load();
+  bout::OptionsIO::create(outname)->write(dump);
 
-    // FCI::dagp dagp(*mesh);
-    // FCI::dagp_fv dagp(*mesh);
+  BoutFinalise();
 
-    Options dump;
-    Field3D R{mesh}, Z{mesh};
-    mesh->get(R, "Rxy", 0.0, false);
-    mesh->get(Z, "Zxy", 0.0, false);
-
-    Field3D xx{mesh}, yy{mesh}, zz{mesh};
-    mesh->get(xx, "x_input", 0.0, false);
-    mesh->get(yy, "y_input", 0.0, false);
-    mesh->get(zz, "z_input", 0.0, false);
-    // dump["R_3d"] = R;
-    // dump["Z_3d"] = Z;
-
-
-    auto coord = mesh->getCoordinates();
-    //coord->g23, coord->g_23, coord->dy, coord->dz, coord->Bxy, coord->J)
-
-    
-    Field3D a{1.0, mesh};
-    
-    mesh->communicate(a, coord->g12, coord->g_12, coord->g23, coord->g_23, coord->dy, coord->dz, coord->Bxy, coord->J);
-    a.applyParallelBoundary("parallel_neumann_o2");
-    coord->g23.applyParallelBoundary("parallel_neumann_o2");
-    coord->g_23.applyParallelBoundary("parallel_neumann_o2");
-    coord->g12.applyParallelBoundary("parallel_neumann_o2");
-    coord->g_12.applyParallelBoundary("parallel_neumann_o2");
-    coord->dy.applyParallelBoundary("parallel_neumann_o2");
-    coord->dz.applyParallelBoundary("parallel_neumann_o2");
-    coord->Bxy.applyParallelBoundary("parallel_neumann_o2");
-    coord->J.applyParallelBoundary("parallel_neumann_o2");
-    
-    int i = 0;
-    for (const auto& func: functions) {
-      auto f = func.func(R, Z);
-      mesh->communicate(f);
-      f.applyParallelBoundary("parallel_neumann_o2");
-      for (const auto& dif: difops) {
-	auto outname = fmt::format("out_{}", i++);
-	dump[outname] = dif.func(a, f);
-        dump[outname].setAttributes({
-            {"operator", dif.name},
-            {"function", func.name},
-            {"f", func.name},
-            {"inp", func.name},
-        });
-      }
-     
-    }
-    if (mesh) {
-      mesh->outputVars(dump);
-      dump["BOUT_VERSION"].force(bout::version::as_double);
-    }
-
-      std::string outname = fmt::format(
-          "{}/BOUT.{}.{}.nc",
-          Options::root()["datadir"].withDefault<std::string>("data"), meshname, BoutComm::rank());
-      
-      bout::OptionsIO::create(outname)->write(dump);
-      
-  };
-  
-  BoutFinalise()    ;
+  return 0;
 }
-
-
-
-
