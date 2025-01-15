@@ -31,7 +31,7 @@ J = 1/sqrt(detgup)
 
 
 
-f = sin(2*x)*sin(2*y)*sin(2*z)
+f = sin(2*y) #*sin(2*y)*sin(2*z)
 a = 1.0
 print("f(x,y,z) = ",f)
 print("a(x,y,z) = ",a)
@@ -54,10 +54,10 @@ g = diff(f,x)
 div_a_grad_perp_f = (1/J)*(diff(a_grad_perp_f_x,x)+diff(a_grad_perp_f_y,y)+diff(a_grad_perp_f_z,z)) 
 
 print("div_a_grad_perp_f(x,y,z) = ",div_a_grad_perp_f)
-
-gfunc = lambdify((x,y,z),div_a_grad_perp_f)
+div_a_grad_perp_f_str = str(div_a_grad_perp_f)
+div_a_grad_perp_f_func = lambdify((x,y,z),div_a_grad_perp_f)
 
 xval = 0.5
 yval = 0.7
 zval = 0.345
-print(f"div_a_grad_perp_f({xval},{yval},{zval}) = ",gfunc(xval,yval,zval))
+print(f"div_a_grad_perp_f({xval},{yval},{zval}) = ",div_a_grad_perp_f_func(xval,yval,zval))
