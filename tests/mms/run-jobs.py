@@ -71,7 +71,7 @@ datasets = []
 for workdir in workdirs:
     boutmeshpath = workdir+"/"+f'BOUT.0.nc'
     boutinppath = workdir+"/"+'BOUT.inp'
-    datasets.append(open_boutdataset(boutmeshpath, inputfilepath=boutinppath, keep_yboundaries=False, is_mms_dump=True))
+    datasets.append(open_boutdataset(boutmeshpath, inputfilepath=boutinppath, keep_yboundaries=False))
 
 testl2norm = []
 l2norm = []
