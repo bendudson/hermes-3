@@ -9,12 +9,12 @@ x = symbols('x')
 y = symbols('y')
 z = symbols('z')
 
-g11 = 1.0 #+ 0.1*sin(x)*sin(y)*sin(z)
-g22 = 1.0 #+ 0.1*sin(x)*sin(y)*sin(z)
-g33 = 1.0 #+ 0.1*sin(x)*sin(y)*sin(z)
-g12 = 0.5#*cos(x)*cos(y)*cos(z)
+g11 = 1.0# + 0.1*sin(x)*sin(y)*sin(z)
+g22 = 1.0# + 0.1*sin(x)*sin(y)*sin(z)
+g33 = 1.0# + 0.1*sin(x)*sin(y)*sin(z)
+g12 = 0.0#*cos(x)*cos(y)*cos(z)
 g23 = 0.5#*cos(x)*cos(y)*cos(z)
-g13 = 0.5#*cos(x)*cos(y)*cos(z)
+g13 = 0.0#*cos(x)*cos(y)*cos(z)
 gup = Matrix(3,3,[g11,g12,g13,g12,g22,g23,g13,g23,g33])
 gdown = gup.inv()
 g_11 = gdown[0,0]
@@ -28,10 +28,16 @@ detgup = gup.det()
 #detgup = g11*g22*g33 - g11*g23*g23 - g12*g12*g33 + g12*g13*g23 - g13*g13*g22 + g13*g12*g23
 J = 1/sqrt(detgup)
 
+g11_str = str(g11)
+g22_str = str(g22)
+g33_str = str(g33)
+g12_str = str(g12)
+g13_str = str(g13)
+g23_str = str(g23)
 
 
 
-f = sin(2*y) #*sin(2*y)*sin(2*z)
+f = sin(y)#*sin(2*y)*sin(2*z)
 a = 1.0
 print("f(x,y,z) = ",f)
 print("a(x,y,z) = ",a)

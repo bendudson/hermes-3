@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
 from perpendicular_laplacian import fstr, astr, div_a_grad_perp_f_str, div_a_grad_perp_f_func
+from perpendicular_laplacian import g11_str, g12_str, g13_str, g22_str, g23_str, g33_str
 
 def lin_func(x,b,a):
     return b*x + a
@@ -41,12 +42,12 @@ dy = {dd}
 nz = {nn}
 dz = {dd}
 
-g11 = 1.0
-g22 = 1.0
-g33 = 1.0
-g12 = 0.0
-g23 = 0.0
-g13 = 0.0
+g11 = {g11_str}
+g22 = {g22_str}
+g33 = {g33_str}
+g12 = {g12_str}
+g23 = {g23_str}
+g13 = {g13_str}
 x_input = x
 y_input = y
 z_input = z
@@ -107,15 +108,20 @@ dylist = np.array(dylist)
 # find linear fit coefficients to test convergence rate
 # and construct fit function for plotting
 # print(l2norm)
-logl2norm = np.log(l2norm)
-logdylist = np.log(dylist)
-outvals = curve_fit(lin_func,logdylist,logl2norm)
-coeffs = outvals[0]
-slope = coeffs[0] # also the convergence order
-offset = coeffs[1]
-logfit = slope*logdylist + offset
-fitfunc = np.exp(logfit)
-
+try:
+    logl2norm = np.log(l2norm)
+    logdylist = np.log(dylist)
+    outvals = curve_fit(lin_func,logdylist,logl2norm)
+    coeffs = outvals[0]
+    slope = coeffs[0] # also the convergence order
+    offset = coeffs[1]
+    logfit = slope*logdylist + offset
+    fitfunc = np.exp(logfit)
+except ValueError:
+    print("Infs/Nans encountered in fit, skipping")
+    slope = None
+    offset = None
+    fitfunc = None
 # record results in dictionary and plot
 #label = attrs["operator"] + " : f = " + attrs["inp"]
 label = "FV::Div_a_Grad_perp(a, f)"
@@ -125,10 +131,15 @@ for key, variable_set in plot_data.items():
     plt.figure()
     plt.plot(xaxis, yaxis, "x-", label="$\\epsilon(\\mathcal{L}\\ast f)$: "+label)
     plt.plot(xaxis, yaxis[0]*(xaxis/xaxis[0])**2, "x-", label="$\\propto \\Delta^2$")
-    plt.plot(xaxis, fit, "x-", label="$e^{{{:.2f}}}\\Delta^{{{:.2f}}}$".format(offset,slope))
+    if not fit is None:
+        plt.plot(xaxis, fit, "x-", label="$e^{{{:.2f}}}\\Delta^{{{:.2f}}}$".format(offset,slope))
     plt.xlabel("$\\Delta = 1/N_y$")
     plt.title(key)
     plt.legend()
-    plt.gca().set_yscale("log")
-    plt.gca().set_xscale("log")
+    if not fit is None:
+        plt.gca().set_yscale("log")
+        plt.gca().set_xscale("log")
+    else:
+        print("l2 error: ",yaxis)
 plt.show()
+
