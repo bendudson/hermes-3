@@ -55,7 +55,7 @@ a = {astr}
 f = {fstr}
 expected_result = {div_a_grad_perp_f_str}
 """
-        file.write(mesh_string)
+        file.write(mesh_string.replace("**","^"))
 
     # run job on this input
     print("../.././hermes_mms_tests -d "+workdir+" > "+workdir+"/output.txt")
@@ -85,9 +85,9 @@ for m in range(0,ntest):
     yy = collectvar(datasets, "y_input", m)
     zz = collectvar(datasets, "z_input", m)
     analytical = div_a_grad_perp_f_func(xx,yy,zz)
-    #print(analytical.values[:,0,0])
-    #print(numerical.values[:,0,0])
-    #print(expected.values[:,0,0])
+    #print(analytical.values[:,5,5])
+    print(numerical.values[:,5,5])
+    print(expected.values[:,5,5])
     error_values = (numerical - analytical)[s]
     test_error_values = (expected - analytical)[s]
     testl2 = np.sqrt(np.mean(test_error_values**2))
