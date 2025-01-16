@@ -1,5 +1,5 @@
 from sympy import symbols, Function, lambdify
-from sympy import sin, log, diff, cos, sqrt
+from sympy import sin, log, diff, cos, sqrt, pi
 from sympy.matrices import Matrix
 import numpy as np
 # see notes for formulae
@@ -37,7 +37,8 @@ g23_str = str(g23)
 
 
 
-f = x**2#*sin(2*y)*sin(2*z)
+#f = sin(2.0*pi*x)*sin(y)*sin(z)
+f = (x**2)*sin(y)*sin(z)
 a = 1.0
 print("f(x,y,z) = ",f)
 print("a(x,y,z) = ",a)
@@ -48,14 +49,12 @@ dfdx = diff(f,x)
 dfdy = diff(f,y)
 dfdz = diff(f,z)
 
-df1 = dfdx - (g12/g22)*dfdy
-df3 = dfdz - (g23/g22)*dfdy
+df1 = dfdx - (g_12/g_22)*dfdy
+df3 = dfdz - (g_23/g_22)*dfdy
 
 a_grad_perp_f_x = a*J*(g11*df1 + g13*df3)
 a_grad_perp_f_y = a*J*(g12*df1 + g23*df3)
 a_grad_perp_f_z = a*J*(g13*df1 + g33*df3)
-
-g = diff(f,x)
 
 div_a_grad_perp_f = (1/J)*(diff(a_grad_perp_f_x,x)+diff(a_grad_perp_f_y,y)+diff(a_grad_perp_f_z,z)) 
 

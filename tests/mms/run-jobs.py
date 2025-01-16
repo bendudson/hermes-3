@@ -12,9 +12,12 @@ def lin_func(x,b,a):
 def collectvar(datasets, var, mesh=0):
     return datasets[mesh][var]
 
-nnbase = 20
-ddbase = 0.05
-ntest = 3
+# This test script below works on BOUT.0.nc output with a single 
+# operator tested. This script can be generalised to work on multiple operators.
+
+nnbase = 20 # base number of grid points
+ddbase = 0.05 # base grid spacing
+ntest = 3 # number of grids tested
 workdirs = []
 # make test for each resolution based on template file
 for i in range(0,ntest):
@@ -27,16 +30,21 @@ for i in range(0,ntest):
     file = workdir+"/BOUT.inp"
     os.system(f"cp BOUT.inp.template "+file)
     # update with mesh values for test
-    nn = nnbase*(i+1)
-    dd = ddbase/(i+1)
+    nn = nnbase*(i+1) # number of points in each grid
+    dd = 2.0*np.pi/nn # y z grid spacing, z, y on [0, 2pi]
+    ddx = 1.0/(nn-4) # x grid spacing to account for guard cells, x on [0,1] 
+    # symmetricGlobalX = true ensures that x = 0 and x = 1 sits
+    # halfway between the last true grid point and the first guard point.
     with open(file,"a") as file:
         mesh_string = f"""
 [mesh]
-symmetricGlobalX = false
+symmetricGlobalX = true
 extrapolate_y = false
+extrapolate_x= false
+extrapolate_z= false
 
 nx = {nn}
-dx = {dd}
+dx = {ddx}
 ny = {nn}
 dy = {dd}
 nz = {nn}
@@ -63,12 +71,16 @@ expected_result = {div_a_grad_perp_f_str}
 
 # now analyse the results of the test
 # this slice avoids including guard cells in the test
-# is this required for periodic geometries?
-s = slice(2, -2), slice(None), slice(None)
+# need guard cells in x (assume 2 here) and guard cells in y (assume 1)
+# no guard cells in z
+s = slice(2, -2), slice(1, -1), slice(None)
+
+# a dictionary of plot data, filled later on
 plot_data = dict()
-datasets = []
+
 # open the series of "workdir/BOUT.0.nc" files, 
 # saving them in a list `datasets`
+datasets = []
 for workdir in workdirs:
     boutmeshpath = workdir+"/"+f'BOUT.0.nc'
     boutinppath = workdir+"/"+'BOUT.inp'
@@ -84,15 +96,33 @@ for m in range(0,ntest):
     xx = collectvar(datasets, "x_input", m)
     yy = collectvar(datasets, "y_input", m)
     zz = collectvar(datasets, "z_input", m)
+    ff = collectvar(datasets, "f", m)
+    aa = collectvar(datasets, "a", m)
     analytical = div_a_grad_perp_f_func(xx,yy,zz)
     #print(analytical.values[:,5,5])
-    print(numerical.values[:,5,5])
-    print(expected.values[:,5,5])
+    #print("num:",numerical.values[:,5,5])
+    #print("exp:",expected.values[:,5,5])
+    #print("xx:",xx.values[:,5,5])
+    #print("a:",aa.values[:,5,5])
+    #print("f:",ff.values[:,5,5])
+    #print("num:",numerical.values[5,5,:])
+    #print("exp:",expected.values[5,5,:])
+    #print("zz:",zz.values[5,5,:])
+    #print("a:",aa.values[5,5,:])
+    #print("f:",ff.values[5,5,:])
+    #print("num:",numerical.values[5,:,5])
+    #print("exp:",expected.values[5,:,5])
+    #print("yy:",yy.values[5,:,5])
+    #print("a:",aa.values[5,:,5])
+    #print("f:",ff.values[5,:,5])
     error_values = (numerical - analytical)[s]
+    #print("err:",error_values.values[:,5,5])
     test_error_values = (expected - analytical)[s]
     testl2 = np.sqrt(np.mean(test_error_values**2))
     testl2norm.append(testl2)
     thisl2 = np.sqrt(np.mean(error_values**2))
+    #thisl2 = np.sqrt(np.mean(error_values[:,5,5]**2))
+    print(thisl2)
     l2norm.append(thisl2)
     nylist.append(yy.shape[1])
     # proxy for grid spacing
@@ -102,18 +132,18 @@ for m in range(0,ntest):
 testl2norm = np.array(testl2norm)
 print("test analytical error: ",testl2norm)
 l2norm = np.array(l2norm)
+print("test error: ",l2norm)
 nylist = np.array(nylist)
 dylist = np.array(dylist)
 
 # find linear fit coefficients to test convergence rate
 # and construct fit function for plotting
-# print(l2norm)
 try:
     logl2norm = np.log(l2norm)
     logdylist = np.log(dylist)
     outvals = curve_fit(lin_func,logdylist,logl2norm)
     coeffs = outvals[0]
-    slope = coeffs[0] # also the convergence order
+    slope = coeffs[0] # the convergence order
     offset = coeffs[1]
     logfit = slope*logdylist + offset
     fitfunc = np.exp(logfit)
@@ -122,10 +152,12 @@ except ValueError:
     slope = None
     offset = None
     fitfunc = None
+
 # record results in dictionary and plot
 #label = attrs["operator"] + " : f = " + attrs["inp"]
 label = "FV::Div_a_Grad_perp(a, f)"
 plot_data[label] = [dylist, l2norm, fitfunc, slope, offset]
+
 for key, variable_set in plot_data.items():
     (xaxis, yaxis, fit, slope, offset) = variable_set
     plt.figure()
