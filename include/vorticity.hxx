@@ -37,6 +37,8 @@ struct Vorticity : public Component {
   ///     Relax radial phi boundaries towards zero-gradient?
   ///   - phi_boundary_timescale: float, 1e-4
   ///     Timescale for phi boundary relaxation [seconds]
+  ///   - phi_core_averagey: bool, default false
+  ///     Average phi core boundary in Y? (if phi_boundary_relax)
   ///   - phi_dissipation: bool, default true
   ///     Parallel dissipation of potential (Recommended)
   ///   - poloidal_flows: bool, default true
@@ -49,7 +51,9 @@ struct Vorticity : public Component {
   ///     Kinematic viscosity [m^2/s]
   ///   - vort_dissipation: bool, default false
   ///     Parallel dissipation of vorticity?
-  /// 
+  ///   - damp_core_vorticity: bool, default false
+  ///     Damp axisymmetric component of vorticity in cell next to core boundary
+  ///
   Vorticity(std::string name, Options &options, Solver *solver);
 
   /// Optional inputs
@@ -121,11 +125,13 @@ private:
   bool vort_dissipation; ///< Parallel dissipation of vorticity
   bool phi_dissipation;  ///< Parallel dissipation of potential
   bool phi_sheath_dissipation; ///< Dissipation at the sheath if phi < 0
+  bool damp_core_vorticity; ///< Damp axisymmetric component of vorticity
 
   bool phi_boundary_relax; ///< Relax boundary to zero-gradient
   BoutReal phi_boundary_timescale; ///< Relaxation timescale [normalised]
   BoutReal phi_boundary_last_update; ///< Time when last updated
-
+  bool phi_core_averagey; ///< Average phi core boundary in Y?
+  
   bool split_n0; // Split phi into n=0 and n!=0 components
   LaplaceXY* laplacexy; // Laplacian solver in X-Y (n=0)
 

@@ -23,6 +23,32 @@ Ind3D indexAt(const Field3D& f, int x, int y, int z) {
   int nz = f.getNz();
   return Ind3D{(x * ny + y) * nz + z, ny, nz};
 }
+
+/// Limited free gradient of log of a quantity
+/// This ensures that the guard cell values remain positive
+/// while also ensuring that the quantity never increases
+///
+///  fm  fc | fp
+///         ^ boundary
+///
+/// exp( 2*log(fc) - log(fm) )
+///
+BoutReal limitFree(BoutReal fm, BoutReal fc) {
+  if (fm < fc) {
+    return fc; // Neumann rather than increasing into boundary
+  }
+  if (fm < 1e-10) {
+    return fc; // Low / no density condition
+  }
+  BoutReal fp = SQ(fc) / fm;
+#if CHECKLEVEL >= 2
+  if (!std::isfinite(fp)) {
+    throw BoutException("SheathBoundary limitFree: {}, {} -> {}", fm, fc, fp);
+  }
+#endif
+
+  return fp;
+}
 }
 
 Vorticity::Vorticity(std::string name, Options& alloptions, Solver* solver) {
@@ -107,6 +133,10 @@ Vorticity::Vorticity(std::string name, Options& alloptions, Solver* solver) {
     .doc("Add dissipation when phi < 0.0 at the sheath")
     .withDefault<bool>(false);
 
+  damp_core_vorticity = options["damp_core_vorticity"]
+	  .doc("Damp vorticity at the core boundary?")
+	  .withDefault<bool>(false);
+
   // Add phi to restart files so that the value in the boundaries
   // is restored on restart. This is done even when phi is not evolving,
   // so that phi can be saved and re-loaded
@@ -130,6 +160,10 @@ Vorticity::Vorticity(std::string name, Options& alloptions, Solver* solver) {
     // Set the last update time to -1, so it will reset
     // the first time RHS function is called
     phi_boundary_last_update = -1.;
+
+    phi_core_averagey = options["phi_core_averagey"]
+      .doc("Average phi core boundary in Y?")
+      .withDefault<bool>(false) and mesh->periodicY(mesh->xstart);
 
     phi_boundary_timescale = options["phi_boundary_timescale"]
                                  .doc("Timescale for phi boundary relaxation [seconds]")
@@ -187,6 +221,7 @@ Vorticity::Vorticity(std::string name, Options& alloptions, Solver* solver) {
 void Vorticity::transform(Options& state) {
   AUTO_TRACE();
 
+  phi.name = "phi";
   auto& fields = state["fields"];
 
   // Set the boundary of phi. Both 2D and 3D fields are kept, though the 3D field
@@ -240,12 +275,32 @@ void Vorticity::transform(Options& state) {
       phi_boundary_last_update = time;
 
       if (mesh->firstX()) {
-        for (int j = mesh->ystart; j <= mesh->yend; j++) {
-          BoutReal phivalue = 0.0;
-          for (int k = 0; k < mesh->LocalNz; k++) {
-            phivalue += phi(mesh->xstart, j, k);
+        BoutReal phivalue = 0.0;
+        if (phi_core_averagey) {
+          BoutReal philocal = 0.0;
+          for (int j = mesh->ystart; j <= mesh->yend; j++) {
+            for (int k = 0; k < mesh->LocalNz; k++) {
+              philocal += phi(mesh->xstart, j, k);
+            }
           }
-          phivalue /= mesh->LocalNz; // Average in Z of point next to boundary
+          MPI_Comm comm_inner = mesh->getYcomm(0);
+          int np;
+          MPI_Comm_size(comm_inner, &np);
+          MPI_Allreduce(&philocal,
+                        &phivalue,
+                        1, MPI_DOUBLE,
+                        MPI_SUM, comm_inner);
+          phivalue /= (np * mesh->LocalNz * mesh->LocalNy);
+        }
+
+        for (int j = mesh->ystart; j <= mesh->yend; j++) {
+          if (!phi_core_averagey) {
+            phivalue = 0.0; // Calculate phi boundary for each Y index separately
+            for (int k = 0; k < mesh->LocalNz; k++) {
+              phivalue += phi(mesh->xstart, j, k);
+            }
+            phivalue /= mesh->LocalNz; // Average in Z of point next to boundary
+          }
 
           // Old value of phi at boundary
           BoutReal oldvalue =
@@ -456,6 +511,68 @@ void Vorticity::transform(Options& state) {
 
       auto P = GET_NOBOUNDARY(Field3D, species["pressure"]);
 
+      // Note: We need boundary conditions on P, so apply the same
+      //       free boundary condition as sheath_boundary.
+      if (P.hasParallelSlices()) {
+        Field3D &P_ydown = P.ydown();
+        Field3D &P_yup = P.yup();
+        for (RangeIterator r = mesh->iterateBndryLowerY(); !r.isDone(); r++) {
+          for (int jz = 0; jz < mesh->LocalNz; jz++) {
+            P_ydown(r.ind, mesh->ystart - 1, jz) = 2 * P(r.ind, mesh->ystart, jz) - P_yup(r.ind, mesh->ystart + 1, jz);
+          }
+        }
+        for (RangeIterator r = mesh->iterateBndryUpperY(); !r.isDone(); r++) {
+          for (int jz = 0; jz < mesh->LocalNz; jz++) {
+            P_yup(r.ind, mesh->yend + 1, jz) = 2 * P(r.ind, mesh->yend, jz) - P_ydown(r.ind, mesh->yend - 1, jz);
+          }
+        }
+      } else {
+        Field3D P_fa = toFieldAligned(P);
+        for (RangeIterator r = mesh->iterateBndryLowerY(); !r.isDone(); r++) {
+          for (int jz = 0; jz < mesh->LocalNz; jz++) {
+            auto i = indexAt(P_fa, r.ind, mesh->ystart, jz);
+            P_fa[i.ym()] = limitFree(P_fa[i.yp()], P_fa[i]);
+          }
+        }
+        for (RangeIterator r = mesh->iterateBndryUpperY(); !r.isDone(); r++) {
+          for (int jz = 0; jz < mesh->LocalNz; jz++) {
+            auto i = indexAt(P_fa, r.ind, mesh->yend, jz);
+            P_fa[i.yp()] = limitFree(P_fa[i.ym()], P_fa[i]);
+          }
+        }
+        P = fromFieldAligned(P_fa);
+      }
+
+      // Note: This calculation requires phi derivatives at the Y boundaries
+      //       Setting to free boundaries
+      if (phi.hasParallelSlices()) {
+        Field3D &phi_ydown = phi.ydown();
+        Field3D &phi_yup = phi.yup();
+        for (RangeIterator r = mesh->iterateBndryLowerY(); !r.isDone(); r++) {
+          for (int jz = 0; jz < mesh->LocalNz; jz++) {
+            phi_ydown(r.ind, mesh->ystart - 1, jz) = 2 * phi(r.ind, mesh->ystart, jz) - phi_yup(r.ind, mesh->ystart + 1, jz);
+          }
+        }
+        for (RangeIterator r = mesh->iterateBndryUpperY(); !r.isDone(); r++) {
+          for (int jz = 0; jz < mesh->LocalNz; jz++) {
+            phi_yup(r.ind, mesh->yend + 1, jz) = 2 * phi(r.ind, mesh->yend, jz) - phi_ydown(r.ind, mesh->yend - 1, jz);
+          }
+        }
+      } else {
+        Field3D phi_fa = toFieldAligned(phi);
+        for (RangeIterator r = mesh->iterateBndryLowerY(); !r.isDone(); r++) {
+          for (int jz = 0; jz < mesh->LocalNz; jz++) {
+            phi_fa(r.ind, mesh->ystart - 1, jz) = 2 * phi_fa(r.ind, mesh->ystart, jz) - phi_fa(r.ind, mesh->ystart + 1, jz);
+          }
+        }
+        for (RangeIterator r = mesh->iterateBndryUpperY(); !r.isDone(); r++) {
+          for (int jz = 0; jz < mesh->LocalNz; jz++) {
+            phi_fa(r.ind, mesh->yend + 1, jz) = 2 * phi_fa(r.ind, mesh->yend, jz) - phi_fa(r.ind, mesh->yend - 1, jz);
+          }
+        }
+        phi = fromFieldAligned(phi_fa);
+      }
+
       Vector3D Jdia_species = P * Curlb_B; // Diamagnetic current for this species
 
       // This term energetically balances diamagnetic term
@@ -469,32 +586,6 @@ void Vorticity::transform(Options& state) {
     // the corresponding compression term in the species pressure equations
     DivJdia = Div(Jdia);
     ddt(Vort) += DivJdia;
-
-    if (diamagnetic_polarisation) {
-      // Calculate energy exchange term nonlinear in pressure
-      // ddt(Pi) += Pi * Div((Pe + Pi) * Curlb_B);
-      for (auto& kv : allspecies.getChildren()) {
-        Options& species = allspecies[kv.first]; // Note: need non-const
-
-        if (!(IS_SET_NOBOUNDARY(species["pressure"]) and species.isSet("charge")
-              and species.isSet("AA"))) {
-          continue; // No pressure, charge or mass -> no polarisation current due to
-                    // diamagnetic flow
-        }
-
-        const auto charge = get<BoutReal>(species["charge"]);
-        if (fabs(charge) < 1e-5) {
-          // No charge
-          continue;
-        }
-
-        const auto P = GET_NOBOUNDARY(Field3D, species["pressure"]);
-        const auto AA = get<BoutReal>(species["AA"]);
-
-        add(species["energy_source"],
-            (3. / 2) * P * (AA / average_atomic_mass / charge) * DivJdia);
-      }
-    }
 
     set(fields["DivJdia"], DivJdia);
   }
@@ -650,6 +741,22 @@ void Vorticity::finally(const Options& state) {
       }
     }
     ddt(Vort) += fromFieldAligned(dissipation);
+  }
+
+  if (damp_core_vorticity) {
+    // Damp axisymmetric vorticity near core boundary
+    if (mesh->firstX() and mesh->periodicY(mesh->xstart)) {
+      for (int j = mesh->ystart; j <= mesh->yend; j++) {
+        BoutReal vort_avg = 0.0; // Average Vort in Z
+        for (int k = 0; k < mesh->LocalNz; k++) {
+          vort_avg += Vort(mesh->xstart, j, k);
+        }
+        vort_avg /= mesh->LocalNz;
+        for (int k = 0; k < mesh->LocalNz; k++) {
+          ddt(Vort)(mesh->xstart, j, k) -= 0.01 * vort_avg;
+        }
+      }
+    }
   }
 }
 

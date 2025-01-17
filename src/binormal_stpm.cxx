@@ -39,7 +39,11 @@ BinormalSTPM::BinormalSTPM(std::string name, Options& alloptions, Solver* solver
   chi_Theta = chi/Theta;
   D_Theta = D/Theta;
   nu_Theta = nu/Theta;
+  Theta_inv = 1./Theta;
   
+  diagnose = options["diagnose"]
+    .doc("Output diagnostics?")
+    .withDefault(false);
 }
 
 void BinormalSTPM::transform(Options& state) {
@@ -50,22 +54,63 @@ void BinormalSTPM::transform(Options& state) {
     const auto& species_name = kv.first;
 
     Options& species = allspecies[species_name];
+    auto AA = get<BoutReal>(species["AA"]);
 
-    const Field3D P = get<Field3D>(species["pressure"]);
-    const Field3D NV = get<Field3D>(species["momentum"]);
-    const Field3D N = get<Field3D>(species["density"]);
+    const Field3D N = species.isSet("density")
+      ? GET_NOBOUNDARY(Field3D, species["density"])
+      : 0.0;
+    const Field3D T = species.isSet("temperature")
+      ? GET_NOBOUNDARY(Field3D, species["temperature"])
+      : 0.0;
+    const Field3D NV = species.isSet("momentum")
+      ? GET_NOBOUNDARY(Field3D, species["momentum"])
+      : 0.0;
     
-    add(species["pressure_source"],
-	(2. / 3) * (1/Theta) * FV::Div_par_K_Grad_par(chi_Theta, P, false));
+    add(species["energy_source"],
+	Theta_inv * FV::Div_par_K_Grad_par(chi_Theta*N, T, false));
 
     add(species["momentum_source"],
-	(1/Theta) * FV::Div_par_K_Grad_par(nu_Theta, NV, false));
+	Theta_inv * FV::Div_par_K_Grad_par(AA*nu_Theta, NV, false));
     
     add(species["density_source"],
-	(1/Theta) * FV::Div_par_K_Grad_par(D_Theta, N, false));
+	Theta_inv * FV::Div_par_K_Grad_par(D_Theta, N, false));
 
   }
 }
 
+void BinormalSTPM::outputVars(Options& state) {
+  AUTO_TRACE();
+  // Normalisations
+  auto Omega_ci = get<BoutReal>(state["Omega_ci"]);
+  auto rho_s0 = get<BoutReal>(state["rho_s0"]);
 
+  if (diagnose) {
 
+      AUTO_TRACE();
+      // Save particle, momentum and energy channels
+
+      set_with_attrs(state[{std::string("D_") + name}], D,
+                      {{"time_dimension", "t"},
+                      {"units", "m^2 s^-1"},
+                      {"conversion", rho_s0 * rho_s0 * Omega_ci},
+                      {"standard_name", "anomalous density diffusion"},
+                      {"long_name", std::string("Binormal Stellarator 2pt model density diffusion of ") + name},
+                      {"source", "binormal_stpm"}});
+
+      set_with_attrs(state[{std::string("chi_") + name}], chi,
+                      {{"time_dimension", "t"},
+                      {"units", "m^2 s^-1"},
+                      {"conversion", rho_s0 * rho_s0 * Omega_ci},
+                      {"standard_name", "anomalous thermal diffusion"},
+                      {"long_name", std::string("Binormal Stellarator 2pt model thermal diffusion of ") + name},
+                      {"source", "binormal_stpm"}});
+
+      set_with_attrs(state[{std::string("nu_") + name}], nu,
+                      {{"time_dimension", "t"},
+                      {"units", "m^2 s^-1"},
+                      {"conversion", rho_s0 * rho_s0 * Omega_ci},
+                      {"standard_name", "anomalous momentum diffusion"},
+                      {"long_name", std::string("Binormal Stellarator 2pt model momentum diffusion of ") + name},
+                      {"source", "binormal_stpm"}});
+  }
+}

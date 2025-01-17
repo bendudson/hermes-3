@@ -3,6 +3,7 @@
 #include <bout/fv_ops.hxx>
 #include <bout/derivs.hxx>
 #include <bout/difops.hxx>
+#include <bout/output_bout_types.hxx>
 
 #include "../include/div_ops.hxx"
 #include "../include/neutral_mixed.hxx"
@@ -30,7 +31,19 @@ NeutralMixed::NeutralMixed(const std::string& name, Options& alloptions, Solver*
   // Evolving variables e.g name is "h" or "h+"
   solver->add(Nn, std::string("N") + name);
   solver->add(Pn, std::string("P") + name);
-  solver->add(NVn, std::string("NV") + name);
+  
+
+  evolve_momentum = options["evolve_momentum"]
+  .doc("Evolve parallel neutral momentum?")
+  .withDefault<bool>(true);
+
+  if (evolve_momentum) {
+    solver->add(NVn, std::string("NV") + name);
+  } else {
+    output_warn.write("WARNING: Not evolving neutral parallel momentum. NVn and Vn set to zero\n");
+    NVn = 0.0;
+    Vn = 0.0;
+  }
 
   sheath_ydown = options["sheath_ydown"]
                      .doc("Enable wall boundary conditions at ydown")
@@ -101,6 +114,32 @@ NeutralMixed::NeutralMixed(const std::string& name, Options& alloptions, Solver*
                .withDefault(pressure_source)
            / (SI::qe * Nnorm * Tnorm * Omega_ci);
 
+  // Set boundary condition defaults: Neumann for all but the diffusivity.
+  // The dirichlet on diffusivity ensures no radial flux.
+  // NV and V are ignored as they are hardcoded in the parallel BC code.
+  alloptions[std::string("Dnn") + name]["bndry_all"] = alloptions[std::string("Dnn") + name]["bndry_all"].withDefault("dirichlet");
+  alloptions[std::string("T") + name]["bndry_all"] = alloptions[std::string("T") + name]["bndry_all"].withDefault("neumann");
+  alloptions[std::string("P") + name]["bndry_all"] = alloptions[std::string("P") + name]["bndry_all"].withDefault("neumann");
+  alloptions[std::string("N") + name]["bndry_all"] = alloptions[std::string("N") + name]["bndry_all"].withDefault("neumann");
+
+  // Pick up BCs from input file
+  Dnn.setBoundary(std::string("Dnn") + name);
+  Tn.setBoundary(std::string("T") + name);
+  Pn.setBoundary(std::string("P") + name);
+  Nn.setBoundary(std::string("N") + name);
+
+  // All floored versions of variables get the same boundary as the original
+  Tnlim.setBoundary(std::string("T") + name);
+  Pnlim.setBoundary(std::string("P") + name);
+  logPnlim.setBoundary(std::string("P") + name);
+  Nnlim.setBoundary(std::string("N") + name);
+
+  // Product of Dnn and another parameter has same BC as Dnn - see eqns to see why this is necessary
+  DnnNn.setBoundary(std::string("Dnn") + name);
+  DnnPn.setBoundary(std::string("Dnn") + name);
+  DnnTn.setBoundary(std::string("Dnn") + name);
+  DnnNVn.setBoundary(std::string("Dnn") + name);
+
 }
 
 void NeutralMixed::transform(Options& state) {
@@ -118,7 +157,7 @@ void NeutralMixed::transform(Options& state) {
   // Nnlim Used where division by neutral density is needed
   Nnlim = floor(Nn, nn_floor);
   Tn = Pn / Nnlim;
-  Tn.applyBoundary("neumann");
+  Tn.applyBoundary();
 
   Vn = NVn / (AA * Nnlim);
   Vnlim = Vn;
@@ -127,10 +166,10 @@ void NeutralMixed::transform(Options& state) {
   Vnlim.applyBoundary("neumann");
 
   Pnlim = floor(Nnlim * Tn, 1e-8);
-  Pnlim.applyBoundary("neumann");
+  Pnlim.applyBoundary();
 
   /////////////////////////////////////////////////////
-  // Boundary conditions
+  // Parallel boundary conditions
   TRACE("Neutral boundary conditions");
 
   if (sheath_ydown) {
@@ -215,8 +254,8 @@ void NeutralMixed::finally(const Options& state) {
   // Field3D logNn = log(Nn);
   // Field3D logTn = log(Tn);
 
-  Field3D logPnlim = log(Pnlim);
-  logPnlim.applyBoundary("neumann");
+  logPnlim = log(Pnlim);
+  logPnlim.applyBoundary();
 
   ///////////////////////////////////////////////////////
   // Calculate cross-field diffusion from collision frequency
@@ -253,17 +292,15 @@ void NeutralMixed::finally(const Options& state) {
 
   mesh->communicate(Dnn);
   Dnn.clearParallelSlices();
-  Dnn.applyBoundary("dirichlet_o2");
+  Dnn.applyBoundary();
 
-  // Apply a Dirichlet boundary condition to all the coefficients
-  // used in diffusion operators. This is to ensure that the flux through
-  // the boundary is zero.
-  Field3D DnnPn = Dnn * Pn;
-  DnnPn.applyBoundary("dirichlet_o2");
-  Field3D DnnNn = Dnn * Nn;
-  DnnNn.applyBoundary("dirichlet_o2");
+  // Neutral diffusion parameters have the same boundary condition as Dnn
+  DnnPn = Dnn * Pn;
+  DnnPn.applyBoundary();
+  DnnNn = Dnn * Nn;
+  DnnNn.applyBoundary();
   Field3D DnnNVn = Dnn * NVn;
-  DnnNVn.applyBoundary("dirichlet_o2");
+  DnnNVn.applyBoundary();
 
   if (sheath_ydown) {
     for (RangeIterator r = mesh->iterateBndryLowerY(); !r.isDone(); r++) {
@@ -293,7 +330,7 @@ void NeutralMixed::finally(const Options& state) {
   /////////////////////////////////////////////////////
   // Neutral density
   TRACE("Neutral density");
-  ddt(Nn) = -FV::Div_par_mod<hermes::Limiter>(Nn, Vn, sound_speed) // Advection
+  ddt(Nn) = -FV::Div_par_mod<hermes::Limiter>(Nn, Vn, sound_speed, particle_flow_ylow) // Advection
             + Div_a_Grad_perp_nonorthog(DnnNn, logPnlim) // Perpendicular diffusion
       ;
 
@@ -303,47 +340,55 @@ void NeutralMixed::finally(const Options& state) {
   }
   ddt(Nn) += Sn; // Always add density_source
 
-  /////////////////////////////////////////////////////
-  // Neutral momentum
-  TRACE("Neutral momentum");
+  if (evolve_momentum) {
 
-  ddt(NVn) =
-      -AA * FV::Div_par_fvv<hermes::Limiter>(Nnlim, Vn, sound_speed) // Momentum flow
-      - Grad_par(Pn)                                                 // Pressure gradient
-      + Div_a_Grad_perp_nonorthog(DnnNVn, logPnlim) // Perpendicular diffusion
-      ;
+    /////////////////////////////////////////////////////
+    // Neutral momentum
+    TRACE("Neutral momentum");
 
-  if (neutral_viscosity) {
-    // NOTE: The following viscosity terms are are not (yet) balanced
-    //       by a viscous heating term
+    ddt(NVn) =
+        -AA * FV::Div_par_fvv<hermes::Limiter>(Nnlim, Vn, sound_speed) // Momentum flow
+        - Grad_par(Pn)                                                 // Pressure gradient
+        + Div_a_Grad_perp_nonorthog(DnnNVn, logPnlim) // Perpendicular diffusion
+        ;
 
-    // Relationship between heat conduction and viscosity for neutral
-    // gas Chapman, Cowling "The Mathematical Theory of Non-Uniform
-    // Gases", CUP 1952 Ferziger, Kaper "Mathematical Theory of
-    // Transport Processes in Gases", 1972
-    // eta_n = (2. / 5) * kappa_n;
-    //
+    if (neutral_viscosity) {
+      // NOTE: The following viscosity terms are are not (yet) balanced
+      //       by a viscous heating term
+      // Relationship between heat conduction and viscosity for neutral
+      // gas Chapman, Cowling "The Mathematical Theory of Non-Uniform
+      // Gases", CUP 1952 Ferziger, Kaper "Mathematical Theory of
+      // Transport Processes in Gases", 1972
+      // eta_n = (2. / 5) * kappa_n;
+      //
 
-    ddt(NVn) += AA * Div_a_Grad_perp_nonorthog((2. / 5) * DnnNn, Vn)    // Perpendicular viscosity
-              + AA * FV::Div_par_K_Grad_par((2. / 5) * DnnNn, Vn) // Parallel viscosity
-      ;
-  }
+      ddt(NVn) += AA * Div_a_Grad_perp_nonorthog((2. / 5) * DnnNn, Vn)    // Perpendicular viscosity
+                + AA * FV::Div_par_K_Grad_par((2. / 5) * DnnNn, Vn) // Parallel viscosity
+        ;
+    }
 
-  if (localstate.isSet("momentum_source")) {
-    Snv = get<Field3D>(localstate["momentum_source"]);
-    ddt(NVn) += Snv;
+    if (localstate.isSet("momentum_source")) {
+      Snv = get<Field3D>(localstate["momentum_source"]);
+      ddt(NVn) += Snv;
+    }
+
+  } else {
+    ddt(NVn) = 0;
+    Snv = 0;
   }
 
   /////////////////////////////////////////////////////
   // Neutral pressure
   TRACE("Neutral pressure");
 
-  ddt(Pn) = -FV::Div_par_mod<hermes::Limiter>(Pn, Vn, sound_speed) // Advection
+  ddt(Pn) = -FV::Div_par_mod<hermes::Limiter>(Pn, Vn, sound_speed, energy_flow_ylow) // Advection
             - (2. / 3) * Pn * Div_par(Vn)                          // Compression
             + Div_a_Grad_perp_nonorthog(DnnPn, logPnlim) // Perpendicular diffusion
             + Div_a_Grad_perp_nonorthog(DnnNn, Tn)       // Conduction
             + FV::Div_par_K_Grad_par(DnnNn, Tn)    // Parallel conduction
       ;
+
+  energy_flow_ylow *= 5./2;
 
   Sp = pressure_source;
   if (localstate.isSet("energy_source")) {
@@ -367,6 +412,20 @@ void NeutralMixed::finally(const Options& state) {
     ddt(Pn) *= scale_timederivs;
     ddt(NVn) *= scale_timederivs;
   }
+
+#if CHECKLEVEL >= 1
+  for (auto& i : Nn.getRegion("RGN_NOBNDRY")) {
+    if (!std::isfinite(ddt(Nn)[i])) {
+      throw BoutException("ddt(N{}) non-finite at {}\n", name, i);
+    }
+    if (!std::isfinite(ddt(Pn)[i])) {
+      throw BoutException("ddt(P{}) non-finite at {}\n", name, i);
+    }
+    if (!std::isfinite(ddt(NVn)[i])) {
+      throw BoutException("ddt(NV{}) non-finite at {}\n", name, i);
+    }
+  }
+#endif
 }
 
 void NeutralMixed::outputVars(Options& state) {
@@ -494,6 +553,8 @@ void NeutralMixed::precon(const Options& state, BoutReal gamma) {
   inv->setCoefD(coef);
 
   ddt(Nn) = inv->solve(ddt(Nn));
-  ddt(NVn) = inv->solve(ddt(NVn));
+  if (evolve_momentum) {
+    ddt(NVn) = inv->solve(ddt(NVn));
+  }
   ddt(Pn) = inv->solve(ddt(Pn));
 }
