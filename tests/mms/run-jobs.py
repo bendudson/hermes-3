@@ -164,7 +164,7 @@ for outname, label in [ ["result","FV::Div_a_Grad_perp(a, f)"], ["result_nonorth
 for key, variable_set in plot_data.items():
     (xaxis, yaxis, fit, slope, offset) = variable_set
     plt.figure()
-    plt.plot(xaxis, yaxis, "x-", label="$\\epsilon(\\mathcal{L}\\ast f)$: "+label)
+    plt.plot(xaxis, yaxis, "x-", label="$\\epsilon(\\mathcal{L}\\ast f)$: "+key)
     plt.plot(xaxis, yaxis[0]*(xaxis/xaxis[0])**2, "x-", label="$\\propto \\Delta^2$")
     if not fit is None:
         plt.plot(xaxis, fit, "x-", label="$e^{{{:.2f}}}\\Delta^{{{:.2f}}}$".format(offset,slope))
