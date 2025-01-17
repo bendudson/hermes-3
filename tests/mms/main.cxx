@@ -5,6 +5,7 @@
 #include "div_ops.hxx"
 #include "bout/fv_ops.hxx"
 #include "bout/difops.hxx"
+#include "../include/div_ops.hxx"
 
 int main(int argc, char** argv) {
   BoutInitialise(argc, argv);
@@ -46,7 +47,10 @@ int main(int argc, char** argv) {
 
   Field3D result = FV::Div_a_Grad_perp(a, f);
   dump["result"] = result;
-    
+
+  Field3D result_nonorthog = Div_a_Grad_perp_nonorthog(a, f);
+  dump["result_nonorthog"] = result_nonorthog;
+
   mesh->outputVars(dump);
 
   std::string outname = fmt::format(

@@ -86,78 +86,81 @@ for workdir in workdirs:
     boutinppath = workdir+"/"+'BOUT.inp'
     datasets.append(open_boutdataset(boutmeshpath, inputfilepath=boutinppath, keep_yboundaries=False))
 
-testl2norm = []
-l2norm = []
-nylist = []
-dylist = []
-for m in range(0,ntest):
-    numerical = collectvar(datasets, "result", m)
-    expected = collectvar(datasets, "expected_result", m)
-    xx = collectvar(datasets, "x_input", m)
-    yy = collectvar(datasets, "y_input", m)
-    zz = collectvar(datasets, "z_input", m)
-    ff = collectvar(datasets, "f", m)
-    aa = collectvar(datasets, "a", m)
-    analytical = div_a_grad_perp_f_func(xx,yy,zz)
-    #print(analytical.values[:,5,5])
-    #print("num:",numerical.values[:,5,5])
-    #print("exp:",expected.values[:,5,5])
-    #print("xx:",xx.values[:,5,5])
-    #print("a:",aa.values[:,5,5])
-    #print("f:",ff.values[:,5,5])
-    #print("num:",numerical.values[5,5,:])
-    #print("exp:",expected.values[5,5,:])
-    #print("zz:",zz.values[5,5,:])
-    #print("a:",aa.values[5,5,:])
-    #print("f:",ff.values[5,5,:])
-    #print("num:",numerical.values[5,:,5])
-    #print("exp:",expected.values[5,:,5])
-    #print("yy:",yy.values[5,:,5])
-    #print("a:",aa.values[5,:,5])
-    #print("f:",ff.values[5,:,5])
-    error_values = (numerical - analytical)[s]
-    #print("err:",error_values.values[:,5,5])
-    test_error_values = (expected - analytical)[s]
-    testl2 = np.sqrt(np.mean(test_error_values**2))
-    testl2norm.append(testl2)
-    thisl2 = np.sqrt(np.mean(error_values**2))
-    #thisl2 = np.sqrt(np.mean(error_values[:,5,5]**2))
-    print(thisl2)
-    l2norm.append(thisl2)
-    nylist.append(yy.shape[1])
-    # proxy for grid spacing
-    dylist.append(1.0/yy.shape[1])
-        
-# cast lists as numpy arrays for further manipulation
-testl2norm = np.array(testl2norm)
-print("test analytical error: ",testl2norm)
-l2norm = np.array(l2norm)
-print("test error: ",l2norm)
-nylist = np.array(nylist)
-dylist = np.array(dylist)
+ # make a easy scan over the two operators, generalisation to N operators possible
+for outname, label in [ ["result","FV::Div_a_Grad_perp(a, f)"], ["result_nonorthog","Div_a_Grad_perp_nonorthog(a, f)"] ]:
+    testl2norm = []
+    l2norm = []
+    nylist = []
+    dylist = []
+    for m in range(0,ntest):
+        numerical = collectvar(datasets, outname, m)
+        expected = collectvar(datasets, "expected_result", m)
+        xx = collectvar(datasets, "x_input", m)
+        yy = collectvar(datasets, "y_input", m)
+        zz = collectvar(datasets, "z_input", m)
+        ff = collectvar(datasets, "f", m)
+        aa = collectvar(datasets, "a", m)
+        analytical = div_a_grad_perp_f_func(xx,yy,zz)
+        error_values = (numerical - analytical)[s]
+        #print(analytical.values[:,5,5])
+        #print("num:",numerical.values[:,5,5])
+        #print("exp:",expected.values[:,5,5])
+        #print("xx:",xx.values[:,5,5])
+        #print("a:",aa.values[:,5,5])
+        #print("f:",ff.values[:,5,5])
+        #print("num:",numerical.values[5,5,:])
+        #print("exp:",expected.values[5,5,:])
+        #print("zz:",zz.values[5,5,:])
+        #print("a:",aa.values[5,5,:])
+        #print("f:",ff.values[5,5,:])
+        #print("num:",numerical.values[5,:,5])
+        #print("exp:",expected.values[5,:,5])
+        #print("yy:",yy.values[5,:,5])
+        #print("a:",aa.values[5,:,5])
+        #print("f:",ff.values[5,:,5])
+        #print("err:",error_values.values[:,5,5])
+        test_error_values = (expected - analytical)[s]
+        testl2 = np.sqrt(np.mean(test_error_values**2))
+        testl2norm.append(testl2)
+        thisl2 = np.sqrt(np.mean(error_values**2))
+        #thisl2 = np.sqrt(np.mean(error_values[:,5,5]**2))
+        print(thisl2)
+        l2norm.append(thisl2)
+        nylist.append(yy.shape[1])
+        # proxy for grid spacing
+        dylist.append(1.0/yy.shape[1])
+            
+    # cast lists as numpy arrays for further manipulation
+    testl2norm = np.array(testl2norm)
+    print("test analytical error: ",testl2norm)
+    l2norm = np.array(l2norm)
+    print("test error: ",l2norm)
+    nylist = np.array(nylist)
+    dylist = np.array(dylist)
+    
+    # find linear fit coefficients to test convergence rate
+    # and construct fit function for plotting
+    try:
+        logl2norm = np.log(l2norm)
+        logdylist = np.log(dylist)
+        outvals = curve_fit(lin_func,logdylist,logl2norm)
+        coeffs = outvals[0]
+        slope = coeffs[0] # the convergence order
+        offset = coeffs[1]
+        logfit = slope*logdylist + offset
+        fitfunc = np.exp(logfit)
+    except ValueError:
+        print("Infs/Nans encountered in fit, skipping")
+        slope = None
+        offset = None
+        fitfunc = None
+    
+    # record results in dictionary and plot
+    #label = attrs["operator"] + " : f = " + attrs["inp"]
+    #label = "FV::Div_a_Grad_perp(a, f)"
+    plot_data[label] = [dylist, l2norm, fitfunc, slope, offset]
 
-# find linear fit coefficients to test convergence rate
-# and construct fit function for plotting
-try:
-    logl2norm = np.log(l2norm)
-    logdylist = np.log(dylist)
-    outvals = curve_fit(lin_func,logdylist,logl2norm)
-    coeffs = outvals[0]
-    slope = coeffs[0] # the convergence order
-    offset = coeffs[1]
-    logfit = slope*logdylist + offset
-    fitfunc = np.exp(logfit)
-except ValueError:
-    print("Infs/Nans encountered in fit, skipping")
-    slope = None
-    offset = None
-    fitfunc = None
-
-# record results in dictionary and plot
-#label = attrs["operator"] + " : f = " + attrs["inp"]
-label = "FV::Div_a_Grad_perp(a, f)"
-plot_data[label] = [dylist, l2norm, fitfunc, slope, offset]
-
+# plot the results
 for key, variable_set in plot_data.items():
     (xaxis, yaxis, fit, slope, offset) = variable_set
     plt.figure()
