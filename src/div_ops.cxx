@@ -1242,9 +1242,9 @@ Field3D Div_a_Grad_perp_nonorthog(const Field3D& a, const Field3D& f) {
                    / (0.5 * coord->dz(i, j, kp) + coord->dz(i, j, k)
                       + 0.5 * coord->dz(i, j, km))
                + (f(i + 1, j, kp)
-                  - f(i + 1, j, km)
+                  - f(i + 1, j, km))
                         / (0.5 * coord->dz(i + 1, j, kp) + coord->dz(i + 1, j, k)
-                           + 0.5 * coord->dz(i + 1, j, km))));
+                           + 0.5 * coord->dz(i + 1, j, km)));
 
         BoutReal fout =
             0.5 * (a(i, j, k) + a(i + 1, j, k))
