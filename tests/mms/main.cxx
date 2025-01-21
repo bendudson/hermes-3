@@ -51,6 +51,12 @@ int main(int argc, char** argv) {
   Field3D result_nonorthog = Div_a_Grad_perp_nonorthog(a, f);
   dump["result_nonorthog"] = result_nonorthog;
 
+  Coordinates* coord = f.getCoordinates();
+  dump["bout_g11"] = coord->g11;
+  Field3D g11{mesh};
+  mesh->get(g11, "g11", 0.0, false);
+  dump["expected_g11"] = g11;
+
   mesh->outputVars(dump);
 
   std::string outname = fmt::format(

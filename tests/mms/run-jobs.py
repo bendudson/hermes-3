@@ -89,9 +89,11 @@ for workdir in workdirs:
  # make a easy scan over the two operators, generalisation to N operators possible
 for outname, label in [ ["result","FV::Div_a_Grad_perp(a, f)"], ["result_nonorthog","Div_a_Grad_perp_nonorthog(a, f)"] ]:
     testl2norm = []
+    g11_l2norm = []
     l2norm = []
     nylist = []
     dylist = []
+    
     for m in range(0,ntest):
         numerical = collectvar(datasets, outname, m)
         expected = collectvar(datasets, "expected_result", m)
@@ -100,6 +102,10 @@ for outname, label in [ ["result","FV::Div_a_Grad_perp(a, f)"], ["result_nonorth
         zz = collectvar(datasets, "z_input", m)
         ff = collectvar(datasets, "f", m)
         aa = collectvar(datasets, "a", m)
+        expected_g11 =  collectvar(datasets, "expected_g11", m)
+        bout_g11 =  collectvar(datasets, "bout_g11", m)
+        g11_error_values = (bout_g11 - expected_g11)[s]
+
         analytical = div_a_grad_perp_f_func(xx,yy,zz)
         error_values = (numerical - analytical)[s]
         #print(analytical.values[:,5,5])
@@ -122,6 +128,8 @@ for outname, label in [ ["result","FV::Div_a_Grad_perp(a, f)"], ["result_nonorth
         test_error_values = (expected - analytical)[s]
         testl2 = np.sqrt(np.mean(test_error_values**2))
         testl2norm.append(testl2)
+        g11_l2 = np.sqrt(np.mean(g11_error_values**2))
+        g11_l2norm.append(testl2)
         thisl2 = np.sqrt(np.mean(error_values**2))
         #thisl2 = np.sqrt(np.mean(error_values[:,5,5]**2))
         print(thisl2)
@@ -135,6 +143,8 @@ for outname, label in [ ["result","FV::Div_a_Grad_perp(a, f)"], ["result_nonorth
     print("test analytical error: ",testl2norm)
     l2norm = np.array(l2norm)
     print("test error: ",l2norm)
+    g11_l2norm = np.array(g11_l2norm)
+    print("g11 test error: ",g11_l2norm)
     nylist = np.array(nylist)
     dylist = np.array(dylist)
     
