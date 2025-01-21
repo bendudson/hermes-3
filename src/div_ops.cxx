@@ -1137,7 +1137,7 @@ Field3D Div_a_Grad_perp_nonorthog(const Field3D& a, const Field3D& f) {
                     * (dfdz - coef_yz * dfdy)
                 // Non-orthogonal mesh correction with g12 metric
                 + (Jc(i, j, k) * g12c(i, j, k)
-                   + Jdown(i, j + 1, k) * g12down(i, j + 1, k))
+                   + Jdown(i, j - 1, k) * g12down(i, j - 1, k))
                       * (dfdx - coef_xy * dfdy));
 
         yzresult(i, j, k) -= fout / (dyc(i, j, k) * Jc(i, j, k));
