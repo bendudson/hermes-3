@@ -7,7 +7,8 @@
 #include "bout/difops.hxx"
 #include "../include/div_ops.hxx"
 
-// Class used to store function in operator list below
+// Class used to store function of two arguments
+// in operator list below
 class nameandfunction2 {
 public:
   std::string name;
@@ -29,7 +30,7 @@ const auto differential_operators = {
 int main(int argc, char** argv) {
   BoutInitialise(argc, argv);
   
-  std::string differential_operator_name = Options::root()["mesh"]["differential_operator_name"].withDefault("FV::Div_a_Grad_perp(a, f)");
+  int n_operators = Options::root()["mesh"]["n_operators"].withDefault(1);
   
   Mesh* mesh = Mesh::create(&Options::root()["mesh"]);
   mesh->load();
@@ -61,18 +62,26 @@ int main(int argc, char** argv) {
   mesh->communicate(f);
   dump["f"] = f;
 
-  // Get expected result from input file
-  Field3D expected_result{mesh};
-  mesh->get(expected_result, "expected_result", 0.0, false);
-  dump["expected_result"] = expected_result;
-
-  for (const auto& difop: differential_operators) {
-	    if ( difop.name.compare(differential_operator_name) == 0){
-          Field3D result = difop.func(a, f);
-          dump["result"] = result;
-          dump["result"].setAttributes({
-                {"operator", difop.name},
-            });
+  for (int i = 0; i < n_operators; i++){
+      std::string inputname = "differential_operator_name_"+std::to_string(i);
+      std::string expectedname = "expected_result_"+std::to_string(i);
+      std::string outname = "result_"+std::to_string(i);
+      std::string differential_operator_name = Options::root()["mesh"][inputname].withDefault("FV::Div_a_Grad_perp(a, f)");
+      // the for loop and if statement below should be replaced
+      // by a neater indexing syntax below if possible
+      for (const auto& difop: differential_operators) {
+          if (difop.name.compare(differential_operator_name) == 0){
+              // Get result of applying the named differential operator
+              Field3D result = difop.func(a, f);
+              dump[outname] = result;
+              dump[outname].setAttributes({
+                    {"operator", difop.name},
+                });
+              // Get expected result from input file
+              Field3D expected_result{mesh};
+              mesh->get(expected_result, expectedname, 0.0, false);
+              dump[expectedname] = expected_result;
+          }
       }
   }
   //Field3D result = FV::Div_a_Grad_perp(a, f);

@@ -20,8 +20,12 @@ nnbase = 20 # base number of grid points
 ddbase = 0.05 # base grid spacing
 ntest = 3 # number of grids tested
 workdirs = []
-differential_operator_test_list = [ "FV::Div_a_Grad_perp(a, f)","Div_a_Grad_perp_nonorthog(a, f)" ]
-differential_operator_name = differential_operator_test_list[1]
+
+# list of differential operators to be tested
+# pairs [name, symbolic string]
+differential_operator_test_list = [["FV::Div_a_Grad_perp(a, f)", div_a_grad_perp_f_str],
+                                   ["Div_a_Grad_perp_nonorthog(a, f)", div_a_grad_perp_f_str]]
+
 # make test for each resolution based on template file
 for i in range(0,ntest):
     workdir = f"slab-mms-test-{i}"
@@ -64,8 +68,16 @@ y_input = y
 z_input = z
 a = {astr}
 f = {fstr}
-expected_result = {div_a_grad_perp_f_str}
-differential_operator_name = {differential_operator_name}
+"""
+        n_operators = len(differential_operator_test_list)
+        mesh_string += f"""
+# information about differential operators
+n_operators = {n_operators}
+"""
+        for i in range(0,n_operators):
+            mesh_string += f"""
+differential_operator_name_{i} = {differential_operator_test_list[i][0]}          
+expected_result_{i} = {differential_operator_test_list[i][1]}
 """
         file.write(mesh_string.replace("**","^"))
 
@@ -91,13 +103,14 @@ for workdir in workdirs:
     datasets.append(open_boutdataset(boutmeshpath, inputfilepath=boutinppath, keep_yboundaries=False))
 
 # make a easy scan over the two operators, generalisation to N operators possible
-for label in [differential_operator_name]:
+for i, values in enumerate(differential_operator_test_list):
+    label = values[0]
     l2norm = []
     nylist = []
     dylist = []
     for m in range(0,ntest):
-        numerical = collectvar(datasets, "result", m)
-        expected = collectvar(datasets, "expected_result", m)
+        numerical = collectvar(datasets, f"result_{i}", m)
+        expected = collectvar(datasets, f"expected_result_{i}", m)
         xx = collectvar(datasets, "x_input", m)
         yy = collectvar(datasets, "y_input", m)
         zz = collectvar(datasets, "z_input", m)
@@ -159,7 +172,7 @@ try:
         else:
             print("l2 error: ",yaxis)
         plt.savefig(f"fig_{ifig}.png")
-        #plt.show()
+        plt.show()
         plt.close()
         ifig+=1
 except:
