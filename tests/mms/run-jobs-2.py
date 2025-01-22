@@ -20,6 +20,8 @@ nnbase = 20 # base number of grid points
 ddbase = 0.05 # base grid spacing
 ntest = 3 # number of grids tested
 workdirs = []
+differential_operator_test_list = [ "FV::Div_a_Grad_perp(a, f)","Div_a_Grad_perp_nonorthog(a, f)" ]
+differential_operator_name = differential_operator_test_list[1]
 # make test for each resolution based on template file
 for i in range(0,ntest):
     workdir = f"slab-mms-test-{i}"
@@ -63,6 +65,7 @@ z_input = z
 a = {astr}
 f = {fstr}
 expected_result = {div_a_grad_perp_f_str}
+differential_operator_name = {differential_operator_name}
 """
         file.write(mesh_string.replace("**","^"))
 
@@ -87,14 +90,13 @@ for workdir in workdirs:
     boutinppath = workdir+"/"+'BOUT.inp'
     datasets.append(open_boutdataset(boutmeshpath, inputfilepath=boutinppath, keep_yboundaries=False))
 
- # make a easy scan over the two operators, generalisation to N operators possible
-for outname, label in [ ["result","FV::Div_a_Grad_perp(a, f)"], ["result_nonorthog","Div_a_Grad_perp_nonorthog(a, f)"] ]:
+# make a easy scan over the two operators, generalisation to N operators possible
+for label in [differential_operator_name]:
     l2norm = []
     nylist = []
     dylist = []
-    
     for m in range(0,ntest):
-        numerical = collectvar(datasets, outname, m)
+        numerical = collectvar(datasets, "result", m)
         expected = collectvar(datasets, "expected_result", m)
         xx = collectvar(datasets, "x_input", m)
         yy = collectvar(datasets, "y_input", m)
@@ -157,6 +159,7 @@ try:
         else:
             print("l2 error: ",yaxis)
         plt.savefig(f"fig_{ifig}.png")
+        #plt.show()
         plt.close()
         ifig+=1
 except:

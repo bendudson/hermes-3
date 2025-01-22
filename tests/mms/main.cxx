@@ -7,9 +7,30 @@
 #include "bout/difops.hxx"
 #include "../include/div_ops.hxx"
 
+// Class used to store function in operator list below
+class nameandfunction2 {
+public:
+  std::string name;
+  std::function<Field3D(const Field3D&, const Field3D&)> func;
+};
+
+// List of tested operators
+const auto differential_operators = {
+    nameandfunction2{"FV::Div_a_Grad_perp(a, f)",
+                 [](const Field3D &a, const Field3D &f) {
+                   return FV::Div_a_Grad_perp(a, f);
+                 }},
+    nameandfunction2{"Div_a_Grad_perp_nonorthog(a, f)",
+                 [](const Field3D &a, const Field3D &f) {
+                   return Div_a_Grad_perp_nonorthog(a, f);
+                 }},
+};
+
 int main(int argc, char** argv) {
   BoutInitialise(argc, argv);
-
+  
+  std::string differential_operator_name = Options::root()["mesh"]["differential_operator_name"].withDefault("FV::Div_a_Grad_perp(a, f)");
+  
   Mesh* mesh = Mesh::create(&Options::root()["mesh"]);
   mesh->load();
 
@@ -45,17 +66,20 @@ int main(int argc, char** argv) {
   mesh->get(expected_result, "expected_result", 0.0, false);
   dump["expected_result"] = expected_result;
 
-  Field3D result = FV::Div_a_Grad_perp(a, f);
-  dump["result"] = result;
+  for (const auto& difop: differential_operators) {
+	    if ( difop.name.compare(differential_operator_name) == 0){
+          Field3D result = difop.func(a, f);
+          dump["result"] = result;
+          dump["result"].setAttributes({
+                {"operator", difop.name},
+            });
+      }
+  }
+  //Field3D result = FV::Div_a_Grad_perp(a, f);
+  //dump["result"] = result;
 
-  Field3D result_nonorthog = Div_a_Grad_perp_nonorthog(a, f);
-  dump["result_nonorthog"] = result_nonorthog;
-
-  Coordinates* coord = f.getCoordinates();
-  dump["bout_g11"] = coord->g11;
-  Field3D g11{mesh};
-  mesh->get(g11, "g11", 0.0, false);
-  dump["expected_g11"] = g11;
+  //Field3D result_nonorthog = Div_a_Grad_perp_nonorthog(a, f);
+  //dump["result_nonorthog"] = result_nonorthog;
 
   mesh->outputVars(dump);
 
