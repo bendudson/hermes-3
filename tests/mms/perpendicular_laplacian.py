@@ -39,7 +39,7 @@ g23_str = str(g23)
 
 #f = sin(2.0*pi*x)*sin(y)*sin(z)
 f = (x**2)*sin(y)*sin(z)
-a = 1.0
+a = 1.0 + 0.1*x**3*sin(2*y)*sin(2*z)
 print("f(x,y,z) = ",f)
 print("a(x,y,z) = ",a)
 fstr = str(f)
