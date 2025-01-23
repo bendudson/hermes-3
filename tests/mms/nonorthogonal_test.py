@@ -29,7 +29,7 @@ test_input = {
     "g12_string": str(g12),
     "g13_string": str(g13),
     "g23_string": str(g23),
-    "test_dir" : "orthogonal"
+    "test_dir" : "nonorthogonal"
 }
 
 success, output_message = run_manufactured_solutions_test(test_input)
