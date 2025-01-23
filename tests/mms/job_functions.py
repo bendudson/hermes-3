@@ -25,6 +25,9 @@ def run_manufactured_solutions_test(test_input):
    g23_str = test_input["g23_string"]
    base_test_dir = test_input["test_dir"]
 
+   # create directory 
+   if not os.path.isdir(base_test_dir):
+       os.system("mkdir "+base_test_dir)
    workdirs = []
    # make test for each resolution based on template file
    for i in range(0,ntest):
