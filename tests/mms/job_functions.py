@@ -24,6 +24,7 @@ def run_manufactured_solutions_test(test_input):
    g13_str = test_input["g13_string"]
    g23_str = test_input["g23_string"]
    base_test_dir = test_input["test_dir"]
+   interactive_plots = test_input["interactive_plots"]
 
    # create directory 
    if not os.path.isdir(base_test_dir):
@@ -175,7 +176,8 @@ def run_manufactured_solutions_test(test_input):
          else:
                print("l2 error: ",yaxis)
          plt.savefig(f"fig_{ifig}.png")
-         plt.show()
+         if interactive_plots:
+             plt.show()
          plt.close()
          ifig+=1
    except:
