@@ -260,9 +260,13 @@ if(HERMES_TESTS)
     add_executable(hermes_mms_tests
                    tests/mms/main.cxx
                    ${TEST_SOURCES})
-
-    add_test(NAME hermes_mms_tests COMMAND hermes_mms_tests)
     target_link_libraries(hermes_mms_tests PRIVATE gtest bout++::bout++ hermes-3-lib)
+    add_test(NAME differential_operators_mms_orthogonal
+           WORKING_DIRECTORY tests/mms/
+           COMMAND python3 orthogonal_test.py)
+    add_test(NAME differential_operators_mms_nonorthogonal
+           WORKING_DIRECTORY tests/mms/
+           COMMAND python3 nonorthogonal_test.py)
   endif()
 endif()
 
