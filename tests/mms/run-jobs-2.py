@@ -197,9 +197,9 @@ for key, variable_set in plot_data.items():
                 this_test_success = False
     # append test message and set global success variable
     if this_test_success:
-        output_message += f"{key} convergence rate {slope:.2f} => Test passed \n"
+        output_message += f"{key} convergence order {slope:.2f} => Test passed \n"
     else:
-        output_message += f"{key} convergence rate {slope:.2f}  => Test failed \n"
+        output_message += f"{key} convergence order {slope:.2f}  => Test failed \n"
         success = False
 
 print(output_message)
