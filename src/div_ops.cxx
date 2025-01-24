@@ -55,14 +55,14 @@ const Field3D Div_par_diffusion_index(const Field3D &f, bool bndry_flux) {
             continue;
         }
         BoutReal J =
-            0.5 * (coord->J(i, j) + coord->J(i, j + 1)); // Jacobian at boundary
+	  0.5 * (coord->J(i, j, k) + coord->J(i, j + 1, k)); // Jacobian at boundary
 
         BoutReal gradient = f(i, j + 1, k) - f(i, j, k);
 
         BoutReal flux = J * gradient;
 
-        result(i, j, k) += flux / coord->J(i, j);
-        result(i, j + 1, k) -= flux / coord->J(i, j + 1);
+        result(i, j, k) += flux / coord->J(i, j, k);
+        result(i, j + 1, k) -= flux / coord->J(i, j + 1, k);
       }
   return result;
 }
@@ -267,13 +267,15 @@ const Field3D Div_n_bxGrad_f_B_XPPM(const Field3D &n, const Field3D &f,
 
         // 2) Calculate velocities on cell faces
 
-        BoutReal vU = coord->J(i, j) * (fmp - fpp) / coord->dx(i, j); // -J*df/dx
-        BoutReal vD = coord->J(i, j) * (fmm - fpm) / coord->dx(i, j); // -J*df/dx
+        BoutReal vU = 0.5 * (coord->J(i, j, k) + coord->J(i, j, kp)) * (fmp - fpp) /
+	              coord->dx(i, j, k); // -J*df/dx
+	BoutReal vD = 0.5 * (coord->J(i, j, k) + coord->J(i, j, km)) * (fmm - fpm) /
+	              coord->dx(i, j, k); // -J*df/dx
 
-        BoutReal vR = 0.5 * (coord->J(i, j) + coord->J(i + 1, j)) * (fpp - fpm) /
-                      coord->dz(i, j); // J*df/dz
-        BoutReal vL = 0.5 * (coord->J(i, j) + coord->J(i - 1, j)) * (fmp - fmm) /
-                      coord->dz(i, j); // J*df/dz
+        BoutReal vR = 0.5 * (coord->J(i, j, k) + coord->J(i + 1, j, k)) * (fpp - fpm) /
+	              coord->dz(i, j, k); // J*df/dz
+        BoutReal vL = 0.5 * (coord->J(i, j, k) + coord->J(i - 1, j, k)) * (fmp - fmm) /
+	              coord->dz(i, j, k); // J*df/dz
 
         // 3) Calculate n on the cell faces. The sign of the
         //    velocity determines which side is used.
@@ -289,7 +291,7 @@ const Field3D Div_n_bxGrad_f_B_XPPM(const Field3D &n, const Field3D &f,
         // Upwind(s, mesh->dx(i,j));
         // XPPM(s, mesh->dx(i,j));
         // Fromm(s, coord->dx(i, j));
-        MC(s, coord->dx(i, j));
+        MC(s, coord->dx(i, j, k));
 
         // Right side
         if ((i == mesh->xend) && (mesh->lastX())) {
@@ -304,18 +306,18 @@ const Field3D Div_n_bxGrad_f_B_XPPM(const Field3D &n, const Field3D &f,
               // Flux in from boundary
               flux = vR * 0.5 * (n(i + 1, j, k) + n(i, j, k));
             }
-            result(i, j, k) += flux / (coord->dx(i, j) * coord->J(i, j));
+            result(i, j, k) += flux / (coord->dx(i, j, k) * coord->J(i, j, k));
             result(i + 1, j, k) -=
-                flux / (coord->dx(i + 1, j) * coord->J(i + 1, j));
+	      flux / (coord->dx(i + 1, j, k) * coord->J(i + 1, j, k));
           }
         } else {
           // Not at a boundary
           if (vR > 0.0) {
             // Flux out into next cell
             BoutReal flux = vR * s.R;
-            result(i, j, k) += flux / (coord->dx(i, j) * coord->J(i, j));
+            result(i, j, k) += flux / (coord->dx(i, j, k) * coord->J(i, j, k));
             result(i + 1, j, k) -=
-                flux / (coord->dx(i + 1, j) * coord->J(i + 1, j));
+	      flux / (coord->dx(i + 1, j, k) * coord->J(i + 1, j, k));
 
             // if(i==mesh->xend)
             //  output.write("Setting flux (%d,%d) : %e\n",
@@ -339,18 +341,18 @@ const Field3D Div_n_bxGrad_f_B_XPPM(const Field3D &n, const Field3D &f,
               // Flux in from boundary
               flux = vL * 0.5 * (n(i - 1, j, k) + n(i, j, k));
             }
-            result(i, j, k) -= flux / (coord->dx(i, j) * coord->J(i, j));
+            result(i, j, k) -= flux / (coord->dx(i, j, k) * coord->J(i, j, k));
             result(i - 1, j, k) +=
-                flux / (coord->dx(i - 1, j) * coord->J(i - 1, j));
+	      flux / (coord->dx(i - 1, j, k) * coord->J(i - 1, j, k));
           }
         } else {
           // Not at a boundary
 
           if (vL < 0.0) {
             BoutReal flux = vL * s.L;
-            result(i, j, k) -= flux / (coord->dx(i, j) * coord->J(i, j));
+            result(i, j, k) -= flux / (coord->dx(i, j, k) * coord->J(i, j, k));
             result(i - 1, j, k) +=
-                flux / (coord->dx(i - 1, j) * coord->J(i - 1, j));
+	      flux / (coord->dx(i - 1, j, k) * coord->J(i - 1, j, k));
           }
         }
 
@@ -365,17 +367,17 @@ const Field3D Div_n_bxGrad_f_B_XPPM(const Field3D &n, const Field3D &f,
         // Upwind(s, coord->dz(i, j));
         // XPPM(s, coord->dz(i, j));
         // Fromm(s, coord->dz(i, j));
-        MC(s, coord->dz(i, j));
+        MC(s, coord->dz(i, j, k));
 
         if (vU > 0.0) {
-          BoutReal flux = vU * s.R / (coord->J(i, j) * coord->dz(i, j));
-          result(i, j, k) += flux;
-          result(i, j, kp) -= flux;
+          BoutReal flux = vU * s.R;
+          result(i, j, k) += flux / (coord->J(i, j, k) * coord->dz(i, j, k));
+          result(i, j, kp) -= flux / (coord->J(i, j, kp) * coord->dz(i, j, kp));
         }
         if (vD < 0.0) {
-          BoutReal flux = vD * s.L / (coord->J(i, j) * coord->dz(i, j));
-          result(i, j, k) -= flux;
-          result(i, j, km) += flux;
+          BoutReal flux = vD * s.L;
+          result(i, j, k) -= flux / (coord->J(i, j, k) * coord->dz(i, j, k));
+          result(i, j, km) += flux / (coord->J(i, j, km) * coord->dz(i, j, km));
         }
       }
   FV::communicateFluxes(result);
@@ -423,14 +425,14 @@ const Field3D Div_n_bxGrad_f_B_XPPM(const Field3D &n, const Field3D &f,
 
           // Average dfdy to right X boundary
           BoutReal f_R =
-              0.5 * ((coord->g11(i + 1, j) * coord->g23(i + 1, j) /
-                      SQ(coord->Bxy(i + 1, j))) *
+	    0.5 * ((coord->g11(i + 1, j, k) * coord->g23(i + 1, j, k) /
+		    SQ(coord->Bxy(i + 1, j, k))) *
                          dfdy(i + 1, j, k) +
-                     (coord->g11(i, j) * coord->g23(i, j) / SQ(coord->Bxy(i, j))) *
+		   (coord->g11(i, j, k) * coord->g23(i, j, k) / SQ(coord->Bxy(i, j, k))) *
                          dfdy(i, j, k));
 
           // Advection velocity across cell face
-          BoutReal Vx = 0.5 * (coord->J(i + 1, j) + coord->J(i, j)) * f_R;
+          BoutReal Vx = 0.5 * (coord->J(i + 1, j, k) + coord->J(i, j, k)) * f_R;
 
           // Fromm method
           BoutReal flux = Vx;
@@ -453,9 +455,9 @@ const Field3D Div_n_bxGrad_f_B_XPPM(const Field3D &n, const Field3D &f,
             flux *= nval;
           }
 
-          result(i, j, k) += flux / (coord->dx(i, j) * coord->J(i, j));
+          result(i, j, k) += flux / (coord->dx(i, j, k) * coord->J(i, j, k));
           result(i + 1, j, k) -=
-              flux / (coord->dx(i + 1, j) * coord->J(i + 1, j));
+	    flux / (coord->dx(i + 1, j, k) * coord->J(i + 1, j, k));
         }
   }
 
@@ -494,13 +496,13 @@ const Field3D Div_n_bxGrad_f_B_XPPM(const Field3D &n, const Field3D &f,
 
           // Average dfdx to upper Y boundary
           BoutReal f_U =
-              0.5 * ((coord->g11(i, j + 1) * coord->g23(i, j + 1) /
-                      SQ(coord->Bxy(i, j + 1))) *
+	    0.5 * ((coord->g11(i, j + 1, k) * coord->g23(i, j + 1, k) /
+		    SQ(coord->Bxy(i, j + 1, k))) *
                          dfdx(i, j + 1, k) +
-                     (coord->g11(i, j) * coord->g23(i, j) / SQ(coord->Bxy(i, j))) *
+		   (coord->g11(i, j, k) * coord->g23(i, j, k) / SQ(coord->Bxy(i, j, k))) *
                          dfdx(i, j, k));
 
-          BoutReal Vy = -0.5 * (coord->J(i, j + 1) + coord->J(i, j)) * f_U;
+          BoutReal Vy = -0.5 * (coord->J(i, j + 1, k) + coord->J(i, j, k)) * f_U;
 
           if (mesh->firstY(i) && !mesh->periodicY(i) &&
               (j == mesh->ystart - 1)) {
@@ -534,8 +536,8 @@ const Field3D Div_n_bxGrad_f_B_XPPM(const Field3D &n, const Field3D &f,
             flux *= nval;
           }
 
-          yresult(i, j, k) += flux / (coord->dy(i, j) * coord->J(i, j));
-          yresult(i, j + 1, k) -= flux / (coord->dy(i, j + 1) * coord->J(i, j + 1));
+          yresult(i, j, k) += flux / (coord->dy(i, j, k) * coord->J(i, j, k));
+          yresult(i, j + 1, k) -= flux / (coord->dy(i, j + 1, k) * coord->J(i, j + 1, k));
         }
       }
     }
@@ -585,26 +587,33 @@ const Field3D Div_Perp_Lap_FV_Index(const Field3D &as, const Field3D &fs,
         BoutReal gU = fs(i, j, kp) - fs(i, j, k);
 
         // Flow right
-        BoutReal flux = gR * 0.25 * (coord->J(i + 1, j) + coord->J(i, j)) *
-                        (coord->dx(i + 1, j) + coord->dx(i, j)) *
+        BoutReal flux = gR * 0.25 * (coord->J(i + 1, j, k) + coord->J(i, j, k)) *
+	  (coord->dx(i + 1, j, k) + coord->dx(i, j, k)) *
                         (as(i + 1, j, k) + as(i, j, k));
 
-        result(i, j, k) += flux / (coord->dx(i, j) * coord->J(i, j));
+        result(i, j, k) += flux / (coord->dx(i, j, k) * coord->J(i, j, k));
 
         // Flow left
-        flux = gL * 0.25 * (coord->J(i - 1, j) + coord->J(i, j)) *
-               (coord->dx(i - 1, j) + coord->dx(i, j)) *
+        flux = gL * 0.25 * (coord->J(i - 1, j, k) + coord->J(i, j, k)) *
+	  (coord->dx(i - 1, j, k) + coord->dx(i, j, k)) *
                (as(i - 1, j, k) + as(i, j, k));
 
-        result(i, j, k) -= flux / (coord->dx(i, j) * coord->J(i, j));
+        result(i, j, k) -= flux / (coord->dx(i, j, k) * coord->J(i, j, k));
 
         // Flow up
 
-        flux = gU * 0.5 * (as(i, j, k) + as(i, j, kp));
-        result(i, j, k) += flux;
+        flux = gU * 0.25 * (coord->J(i, j, kp) + coord->J(i, j, kp)) *
+	  (coord->dx(i - 1, j, kp) + coord->dx(i, j, kp)) *
+	  (as(i, j, k) + as(i, j, kp));
+	
+        result(i, j, k) += flux / (coord->dx(i, j, k) * coord->J(i, j, k));
 
-        flux = gD * 0.5 * (as(i, j, k) + as(i, j, km));
-        result(i, j, k) -= flux;
+	// Flow down
+        flux = gD *  0.25 * (coord->J(i, j, km) + coord->J(i, j, km)) *
+	  (coord->dx(i - 1, j, km) + coord->dx(i, j, km)) *
+	  (as(i, j, k) + as(i, j, km));
+	
+        result(i, j, k) -= flux / (coord->dx(i, j, k) * coord->J(i, j, k));
       }
   
   return result;
@@ -652,8 +661,8 @@ const Field3D D4DX4_FV_Index(const Field3D &f, bool bndry_flux) {
         BoutReal d3fdx3 = (f(i + 2, j, k) - 3. * f(i + 1, j, k) +
                            3. * f(i, j, k) - f(i - 1, j, k));
 
-        BoutReal flux = 0.25 * (coord->dx(i, j) + coord->dx(i + 1, j)) *
-                        (coord->J(i, j) + coord->J(i + 1, j)) * d3fdx3;
+        BoutReal flux = 0.25 * (coord->dx(i, j, k) + coord->dx(i + 1, j, k)) *
+	  (coord->J(i, j, k) + coord->J(i + 1, j, k)) * d3fdx3;
 
         if (mesh->lastX() && (i == mesh->xend)) {
           // Boundary
@@ -668,8 +677,8 @@ const Field3D D4DX4_FV_Index(const Field3D &f, bool bndry_flux) {
                        - (6. / 5) * f(i - 2, j, k)       // f_2
                        );
 
-            flux = 0.25 * (coord->dx(i, j) + coord->dx(i + 1, j)) *
-                   (coord->J(i, j) + coord->J(i + 1, j)) * d3fdx3;
+            flux = 0.25 * (coord->dx(i, j, k) + coord->dx(i + 1, j, k)) *
+	      (coord->J(i, j, k) + coord->J(i + 1, j, k)) * d3fdx3;
 
           } else {
             // No fluxes through boundary
@@ -677,8 +686,8 @@ const Field3D D4DX4_FV_Index(const Field3D &f, bool bndry_flux) {
           }
         }
 
-        result(i, j, k) += flux / (coord->J(i, j) * coord->dx(i, j));
-        result(i + 1, j, k) -= flux / (coord->J(i + 1, j) * coord->dx(i + 1, j));
+        result(i, j, k) += flux / (coord->J(i, j, k) * coord->dx(i, j, k));
+        result(i + 1, j, k) -= flux / (coord->J(i + 1, j, k) * coord->dx(i + 1, j, k));
 
         if (j == mesh->xstart) {
           // Left cell boundary, no flux through boundaries
@@ -694,12 +703,12 @@ const Field3D D4DX4_FV_Index(const Field3D &f, bool bndry_flux) {
                          + (6. / 5) * f(i + 2, j, k)       // f_2
                          );
 
-              flux = 0.25 * (coord->dx(i, j) + coord->dx(i + 1, j)) *
-                     (coord->J(i, j) + coord->J(i + 1, j)) * d3fdx3;
+              flux = 0.25 * (coord->dx(i, j, k) + coord->dx(i + 1, j, k)) *
+		(coord->J(i, j, k) + coord->J(i + 1, j, k)) * d3fdx3;
 
-              result(i, j, k) -= flux / (coord->J(i, j) * coord->dx(i, j));
+              result(i, j, k) -= flux / (coord->J(i, j, k) * coord->dx(i, j, k));
               result(i - 1, j, k) +=
-                  flux / (coord->J(i - 1, j) * coord->dx(i - 1, j));
+		flux / (coord->J(i - 1, j, k) * coord->dx(i - 1, j, k));
             }
 
           } else {
@@ -707,12 +716,12 @@ const Field3D D4DX4_FV_Index(const Field3D &f, bool bndry_flux) {
             d3fdx3 = (f(i + 1, j, k) - 3. * f(i, j, k) + 3. * f(i - 1, j, k) -
                       f(i - 2, j, k));
 
-            flux = 0.25 * (coord->dx(i, j) + coord->dx(i + 1, j)) *
-                   (coord->J(i, j) + coord->J(i + 1, j)) * d3fdx3;
+            flux = 0.25 * (coord->dx(i, j, k) + coord->dx(i + 1, j, k)) *
+	      (coord->J(i, j, k) + coord->J(i + 1, j, k)) * d3fdx3;
 
-            result(i, j, k) -= flux / (coord->J(i, j) * coord->dx(i, j));
+            result(i, j, k) -= flux / (coord->J(i, j, k) * coord->dx(i, j, k));
             result(i - 1, j, k) +=
-                flux / (coord->J(i - 1, j) * coord->dx(i - 1, j));
+	      flux / (coord->J(i - 1, j, k) * coord->dx(i - 1, j, k));
           }
         }
       }
@@ -743,51 +752,57 @@ const Field2D Laplace_FV(const Field2D &k, const Field2D &f) {
 
   Coordinates *coord = mesh->getCoordinates();
   
+  Field2D  g11DC = DC(coord->g11);
+  Field2D  g22DC = DC(coord->g22);
+  Field2D  dxDC = DC(coord->dx);
+  Field2D  dyDC = DC(coord->dy);
+  Field2D  JDC = DC(coord->J);
+  
   for (int i = mesh->xstart; i <= mesh->xend; i++)
     for (int j = mesh->ystart; j <= mesh->yend; j++) {
 
       // Calculate gradients on cell faces
 
-      BoutReal gR = (coord->g11(i, j) + coord->g11(i + 1, j)) *
+      BoutReal gR = (g11DC(i, j) + g11DC(i + 1, j)) *
                     (f(i + 1, j) - f(i, j)) /
-                    (coord->dx(i + 1, j) + coord->dx(i, j));
+                    (dxDC(i + 1, j) + dxDC(i, j));
 
-      BoutReal gL = (coord->g11(i - 1, j) + coord->g11(i, j)) *
+      BoutReal gL = (g11DC(i - 1, j) + g11DC(i, j)) *
                     (f(i, j) - f(i - 1, j)) /
-                    (coord->dx(i - 1, j) + coord->dx(i, j));
+                    (dxDC(i - 1, j) + dxDC(i, j));
 
-      BoutReal gU = (coord->g22(i, j) + coord->g22(i, j + 1)) *
+      BoutReal gU = (g22DC(i, j) + g22DC(i, j + 1)) *
                     (f(i, j + 1) - f(i, j)) /
-                    (coord->dy(i, j + 1) + coord->dy(i, j));
+                    (dyDC(i, j + 1) + dyDC(i, j));
 
-      BoutReal gD = (coord->g22(i, j - 1) + coord->g22(i, j)) *
+      BoutReal gD = (g22DC(i, j - 1) + g22DC(i, j)) *
                     (f(i, j) - f(i, j - 1)) /
-                    (coord->dy(i, j) + coord->dy(i, j - 1));
+                    (dyDC(i, j) + dyDC(i, j - 1));
 
       // Flow right
 
-      BoutReal flux = gR * 0.25 * (coord->J(i + 1, j) + coord->J(i, j)) *
+      BoutReal flux = gR * 0.25 * (JDC(i + 1, j) + JDC(i, j)) *
                       (k(i + 1, j) + k(i, j));
 
-      result(i, j) = flux / (coord->dx(i, j) * coord->J(i, j));
+      result(i, j) = flux / (dxDC(i, j) * JDC(i, j));
 
       // Flow left
 
-      flux = gL * 0.25 * (coord->J(i - 1, j) + coord->J(i, j)) *
+      flux = gL * 0.25 * (JDC(i - 1, j) + JDC(i, j)) *
              (k(i - 1, j) + k(i, j));
-      result(i, j) -= flux / (coord->dx(i, j) * coord->J(i, j));
+      result(i, j) -= flux / (dxDC(i, j) * JDC(i, j));
 
       // Flow up
 
-      flux = gU * 0.25 * (coord->J(i, j + 1) + coord->J(i, j)) *
+      flux = gU * 0.25 * (JDC(i, j + 1) + JDC(i, j)) *
              (k(i, j + 1) + k(i, j));
-      result(i, j) += flux / (coord->dy(i, j) * coord->J(i, j));
+      result(i, j) += flux / (dyDC(i, j) * JDC(i, j));
 
       // Flow down
 
-      flux = gD * 0.25 * (coord->J(i, j - 1) + coord->J(i, j)) *
+      flux = gD * 0.25 * (JDC(i, j - 1) + JDC(i, j)) *
              (k(i, j - 1) + k(i, j));
-      result(i, j) -= flux / (coord->dy(i, j) * coord->J(i, j));
+      result(i, j) -= flux / (dyDC(i, j) * JDC(i, j));
     }
   return result;
 }
@@ -812,16 +827,16 @@ const Field3D Div_a_Grad_perp_upwind(const Field3D& a, const Field3D& f) {
       for (int k = 0; k < mesh->LocalNz; k++) {
         // Calculate flux from i to i+1
 
-        const BoutReal gradient = (coord->J(i, j) * coord->g11(i, j)
-                                     + coord->J(i + 1, j) * coord->g11(i + 1, j))
+        const BoutReal gradient = (coord->J(i, j, k) * coord->g11(i, j, k)
+				   + coord->J(i + 1, j, k) * coord->g11(i + 1, j, k))
                                   * (f(i + 1, j, k) - f(i, j, k))
-                                  / (coord->dx(i, j) + coord->dx(i + 1, j));
+	  / (coord->dx(i, j, k) + coord->dx(i + 1, j, k));
 
         // Use the upwind coefficient
         const BoutReal fout = gradient * ((gradient > 0) ? a(i + 1, j, k) : a(i, j, k));
 
-        result(i, j, k) += fout / (coord->dx(i, j) * coord->J(i, j));
-        result(i + 1, j, k) -= fout / (coord->dx(i + 1, j) * coord->J(i + 1, j));
+        result(i, j, k) += fout / (coord->dx(i, j, k) * coord->J(i, j, k));
+        result(i + 1, j, k) -= fout / (coord->dx(i + 1, j, k) * coord->J(i + 1, j, k));
       }
     }
 
@@ -861,52 +876,51 @@ const Field3D Div_a_Grad_perp_upwind(const Field3D& a, const Field3D& f) {
 
   for (int i = mesh->xstart; i <= mesh->xend; i++) {
     for (int j = mesh->ystart; j <= mesh->yend; j++) {
-
-      BoutReal coef_u =
-          0.5
-          * (coord->g_23(i, j) / SQ(coord->J(i, j) * coord->Bxy(i, j))
-             + coord->g_23(i, j + 1) / SQ(coord->J(i, j + 1) * coord->Bxy(i, j + 1)));
-
-      BoutReal coef_d =
-          0.5
-          * (coord->g_23(i, j) / SQ(coord->J(i, j) * coord->Bxy(i, j))
-             + coord->g_23(i, j - 1) / SQ(coord->J(i, j - 1) * coord->Bxy(i, j - 1)));
-
       for (int k = 0; k < mesh->LocalNz; k++) {
         // Calculate flux between j and j+1
         int kp = (k + 1) % mesh->LocalNz;
         int km = (k - 1 + mesh->LocalNz) % mesh->LocalNz;
 
+	BoutReal coef_u =
+          0.5
+          * (coord->g_23(i, j, k) / SQ(coord->J(i, j, k) * coord->Bxy(i, j, k))
+             + coord->g_23(i, j + 1, k) / SQ(coord->J(i, j + 1, k) * coord->Bxy(i, j + 1, k)));
+	
+	BoutReal coef_d =
+          0.5
+          * (coord->g_23(i, j, k) / SQ(coord->J(i, j, k) * coord->Bxy(i, j, k))
+             + coord->g_23(i, j - 1, k) / SQ(coord->J(i, j - 1, k) * coord->Bxy(i, j - 1, k)));
+
         // Calculate Z derivative at y boundary
         BoutReal dfdz =
-            0.25 * (fc(i, j, kp) - fc(i, j, km) + fup(i, j + 1, kp) - fup(i, j + 1, km))
-            / coord->dz(i, j);
+            0.5 * (fc(i, j, kp) - fc(i, j, km) + fup(i, j + 1, kp) - fup(i, j + 1, km))
+	  / (coord->dz(i, j, kp) + coord->dz(i, j, km));
 
         // Y derivative
         BoutReal dfdy = 2. * (fup(i, j + 1, k) - fc(i, j, k))
-                        / (coord->dy(i, j + 1) + coord->dy(i, j));
+	  / (coord->dy(i, j + 1, k) + coord->dy(i, j, k));
 
         BoutReal fout = 0.25 * (ac(i, j, k) + aup(i, j + 1, k))
-                            * (coord->J(i, j) * coord->g23(i, j)
-                               + coord->J(i, j + 1) * coord->g23(i, j + 1))
+	  * (coord->J(i, j, k) * coord->g23(i, j, k)
+	     + coord->J(i, j + 1, k) * coord->g23(i, j + 1, k))
                             * (dfdz - coef_u * dfdy);
 
-        yzresult(i, j, k) = fout / (coord->dy(i, j) * coord->J(i, j));
+        yzresult(i, j, k) = fout / (coord->dy(i, j, k) * coord->J(i, j, k));
 
         // Calculate flux between j and j-1
-        dfdz = 0.25
+        dfdz = 0.5
                * (fc(i, j, kp) - fc(i, j, km) + fdown(i, j - 1, kp) - fdown(i, j - 1, km))
-               / coord->dz(i, j);
+	  / (coord->dz(i, j, kp) + coord->dz(i, j, km));
 
         dfdy = 2. * (fc(i, j, k) - fdown(i, j - 1, k))
-               / (coord->dy(i, j) + coord->dy(i, j - 1));
+	  / (coord->dy(i, j, k) + coord->dy(i, j - 1, k));
 
         fout = 0.25 * (ac(i, j, k) + adown(i, j - 1, k))
-               * (coord->J(i, j) * coord->g23(i, j)
-                  + coord->J(i, j - 1) * coord->g23(i, j - 1))
+	  * (coord->J(i, j, k) * coord->g23(i, j, k)
+	     + coord->J(i, j - 1, k) * coord->g23(i, j - 1, k))
                * (dfdz - coef_d * dfdy);
 
-        yzresult(i, j, k) -= fout / (coord->dy(i, j) * coord->J(i, j));
+        yzresult(i, j, k) -= fout / (coord->dy(i, j, k) * coord->J(i, j, k));
       }
     }
   }
@@ -916,18 +930,18 @@ const Field3D Div_a_Grad_perp_upwind(const Field3D& a, const Field3D& f) {
 
   for (int i = mesh->xstart; i <= mesh->xend; i++) {
     for (int j = mesh->ystart; j <= mesh->yend; j++) {
-      // Coefficient in front of df/dy term
-      BoutReal coef = coord->g_23(i, j)
-                      / (coord->dy(i, j + 1) + 2. * coord->dy(i, j) + coord->dy(i, j - 1))
-                      / SQ(coord->J(i, j) * coord->Bxy(i, j));
-
       for (int k = 0; k < mesh->LocalNz; k++) {
         // Calculate flux between k and k+1
         int kp = (k + 1) % mesh->LocalNz;
 
+	// Coefficient in front of df/dy term
+	BoutReal coef = coord->g_23(i, j, k)
+	  / (coord->dy(i, j + 1, k) + 2. * coord->dy(i, j, k) + coord->dy(i, j - 1, k))
+	  / SQ(coord->J(i, j, k) * coord->Bxy(i, j, k));
+	
         BoutReal gradient =
             // df/dz
-            (fc(i, j, kp) - fc(i, j, k)) / coord->dz(i, j)
+	  (fc(i, j, kp) - fc(i, j, k)) / (0.5* (coord->dz(i, j, k) + coord->dz(i,j,kp)))
 
             // - g_yz * df/dy / SQ(J*B)
             - coef
@@ -936,8 +950,8 @@ const Field3D Div_a_Grad_perp_upwind(const Field3D& a, const Field3D& f) {
 
         BoutReal fout = gradient * ((gradient > 0) ? ac(i, j, kp) : ac(i, j, k));
 
-        yzresult(i, j, k) += fout / coord->dz(i, j);
-        yzresult(i, j, kp) -= fout / coord->dz(i, j);
+        yzresult(i, j, k) += fout / coord->dz(i, j, k);
+        yzresult(i, j, kp) -= fout / coord->dz(i, j, kp);
       }
     }
   }
@@ -946,6 +960,355 @@ const Field3D Div_a_Grad_perp_upwind(const Field3D& a, const Field3D& f) {
     result += yzresult;
   } else {
     result += fromFieldAligned(yzresult);
+  }
+
+  return result;
+}
+
+// Div ( a Grad_perp(f) ) -- ∇⊥ ( a ⋅ ∇⊥ f) --  Vorticity
+// Includes nonorthogonal X-Y and X-Z metric corrections
+//
+const Field3D Div_a_Grad_perp_nonorthog(const Field3D& a, const Field3D& f) {
+  ASSERT2(a.getLocation() == f.getLocation());
+
+  Mesh* mesh = a.getMesh();
+
+  Coordinates* coord = f.getCoordinates();
+
+  // Y and Z fluxes require Y derivatives
+
+  // Fields containing values along the magnetic field
+  Field3D fup(mesh), fdown(mesh);
+  Field3D aup(mesh), adown(mesh);
+
+  Field3D g23up(mesh), g23down(mesh);
+  Field3D g_23up(mesh), g_23down(mesh);
+  Field3D g12up(mesh), g12down(mesh);
+  Field3D g_12up(mesh), g_12down(mesh);
+  Field3D Jup(mesh), Jdown(mesh);
+  Field3D dyup(mesh), dydown(mesh);
+  Field3D dzup(mesh), dzdown(mesh);
+  Field3D Bxyup(mesh), Bxydown(mesh);
+
+  // Values on this y slice (centre).
+  // This is needed because toFieldAligned may modify the field
+  Field3D fc = f;
+  Field3D ac = a;
+
+  Field3D g23c = coord->g23;
+  Field3D g_23c = coord->g_23;
+  Field3D g12c = coord->g12;
+  Field3D g_12c = coord->g_12;
+  Field3D Jc = coord->J;
+  Field3D dxc = coord->dx;
+  Field3D dyc = coord->dy;
+  Field3D dzc = coord->dz;
+  Field3D Bxyc = coord->Bxy;
+
+  // Calculate the X derivative at cell edge (X + 1/2), including in Y guard cells
+  // This is used to calculate Y flux contribution from g21 * d/dx
+  Field3D fddx_xhigh(mesh);
+  fddx_xhigh.allocate();
+  for (int i = mesh->xstart - 1; i <= mesh->xend; i++) {
+    for (int j = mesh->ystart - 1; j <= mesh->yend + 1;
+         j++) { // Note: Including one guard cell
+      for (int k = 0; k < mesh->LocalNz; k++) {
+        fddx_xhigh(i, j, k) = 2. * (f(i + 1, j, k) - f(i, j, k))
+                              / (coord->dx(i, j, k) + coord->dx(i + 1, j, k));
+      }
+    }
+  }
+  Field3D fddx_xhigh_up(mesh), fddx_xhigh_down(mesh);
+
+  // Result of the Y and Z fluxes
+  Field3D yzresult(mesh);
+  yzresult.allocate();
+
+  if (f.hasParallelSlices() && a.hasParallelSlices()) {
+    // Both inputs have yup and ydown
+
+    fup = f.yup();
+    fdown = f.ydown();
+
+    aup = a.yup();
+    adown = a.ydown();
+
+    mesh->communicate(fddx_xhigh);
+    fddx_xhigh_up = fddx_xhigh.yup();
+    fddx_xhigh_down = fddx_xhigh.ydown();
+  } else {
+    // At least one input doesn't have yup/ydown fields.
+    // Need to shift to/from field aligned coordinates
+
+    fup = fdown = fc = toFieldAligned(f);
+    aup = adown = ac = toFieldAligned(a);
+
+    fddx_xhigh_up = fddx_xhigh_down = toFieldAligned(fddx_xhigh);
+
+    yzresult.setDirectionY(YDirectionType::Aligned);
+  }
+
+  if (bout::build::use_metric_3d and coord->J.hasParallelSlices()) {
+    // 3D Metric, need yup/ydown fields.
+    // Requires previous communication of metrics
+    // -- should insert communication here?
+    if (!coord->g23.hasParallelSlices() || !coord->g_23.hasParallelSlices()
+        || !coord->dy.hasParallelSlices() || !coord->dz.hasParallelSlices()
+        || !coord->Bxy.hasParallelSlices() || !coord->J.hasParallelSlices()) {
+      mesh->communicate(coord->g23, coord->g_23, coord->g_12, coord->g12,
+			coord->dy, coord->Bxy, coord->dz, coord->J);
+      // throw BoutException("metrics have no yup/down: Maybe communicate in init?");
+    }
+
+    g23up = coord->g23.yup();
+    g23down = coord->g23.ydown();
+
+    g_23up = coord->g_23.yup();
+    g_23down = coord->g_23.ydown();
+
+    g12up = coord->g12.yup();
+    g12down = coord->g12.ydown();
+
+    g_12up = coord->g_12.yup();
+    g_12down = coord->g_12.ydown();
+
+    Jup = coord->J.yup();
+    Jdown = coord->J.ydown();
+
+    dyup = coord->dy.yup();
+    dydown = coord->dy.ydown();
+
+    dzup = coord->dz.yup();
+    dzdown = coord->dz.ydown();
+
+    Bxyup = coord->Bxy.yup();
+    Bxydown = coord->Bxy.ydown();
+
+  } else {
+    // No 3D metrics
+    // Need to shift to/from field aligned coordinates
+    g23up = g23down = g23c = toFieldAligned(coord->g23);
+    g_23up = g_23down = g_23c = toFieldAligned(coord->g_23);
+    g12up = g12down = g12c = toFieldAligned(coord->g12);
+    g_12up = g_12down = g_12c = toFieldAligned(coord->g_12);
+    Jup = Jdown = Jc = toFieldAligned(coord->J);
+    dxc = toFieldAligned(coord->dx);
+    dyup = dydown = dyc = toFieldAligned(coord->dy);
+    dzup = dzdown = dzc = toFieldAligned(coord->dz);
+    Bxyup = Bxydown = Bxyc = toFieldAligned(coord->Bxy);
+  }
+
+  // Y flux
+  // Includes fluxes due to Z derivatives (non-zero g23 metric)
+  // and due to X derivatives if grid is nonorthogonal (non-zero g12 metric)
+
+  for (int i = mesh->xstart; i <= mesh->xend; i++) {
+    for (int j = mesh->ystart; j <= mesh->yend; j++) {
+      for (int k = 0; k < mesh->LocalNz; k++) {
+        // Calculate flux between j and j+1
+        int kp = (k + 1) % mesh->LocalNz;
+        int km = (k - 1 + mesh->LocalNz) % mesh->LocalNz;
+
+        BoutReal coef_yz =
+            0.5
+            * (g_23c(i, j, k) / SQ(Jc(i, j, k) * Bxyc(i, j, k))
+               + g_23up(i, j + 1, k) / SQ(Jup(i, j + 1, k) * Bxyup(i, j + 1, k)));
+
+        BoutReal coef_xy =
+            0.5
+            * (g_12c(i, j, k) / SQ(Jc(i, j, k) * Bxyc(i, j, k))
+               + g_12up(i, j + 1, k) / SQ(Jup(i, j + 1, k) * Bxyup(i, j + 1, k)));
+
+        // Calculate Z derivative at y boundary
+        BoutReal dfdz =
+            0.5 * (fc(i, j, kp) - fc(i, j, km) + fup(i, j + 1, kp) - fup(i, j + 1, km))
+            / (dzc(i, j, k) + dzup(i, j + 1, k));
+
+        // Y derivative
+        BoutReal dfdy =
+            2. * (fup(i, j + 1, k) - fc(i, j, k)) / (dyup(i, j + 1, k) + dyc(i, j, k));
+
+        // X derivative at Y boundary
+        BoutReal dfdx = 0.25
+                        * (fddx_xhigh(i - 1, j, k) + fddx_xhigh(i, j, k)
+                           + fddx_xhigh_up(i - 1, j + 1, k) + fddx_xhigh_up(i, j + 1, k));
+
+        BoutReal fout =
+            0.25 * (ac(i, j, k) + aup(i, j + 1, k))
+            * (
+                // Component of flux from d/dz and d/dy
+                (Jc(i, j, k) * g23c(i, j, k) + Jup(i, j + 1, k) * g23up(i, j + 1, k))
+                    * (dfdz - coef_yz * dfdy)
+                // Non-orthogonal mesh correction with g12 metric
+                + (Jc(i, j, k) * g12c(i, j, k) + Jup(i, j + 1, k) * g12up(i, j + 1, k))
+                      * (dfdx - coef_xy * dfdy));
+
+        yzresult(i, j, k) = fout / (dyc(i, j, k) * Jc(i, j, k));
+
+        // Calculate flux between j and j-1
+        coef_yz =
+            0.5
+            * (g_23c(i, j, k) / SQ(Jc(i, j, k) * Bxyc(i, j, k))
+               + g_23down(i, j - 1, k) / SQ(Jdown(i, j - 1, k) * Bxydown(i, j - 1, k)));
+
+        coef_xy =
+            0.5
+            * (g_12c(i, j, k) / SQ(Jc(i, j, k) * Bxyc(i, j, k))
+               + g_12down(i, j - 1, k) / SQ(Jdown(i, j - 1, k) * Bxydown(i, j - 1, k)));
+
+        dfdz = 0.5
+               * (fc(i, j, kp) - fc(i, j, km) + fdown(i, j - 1, kp) - fdown(i, j - 1, km))
+               / (dzc(i, j, k) + dzdown(i, j - 1, k));
+
+        dfdy = 2. * (fc(i, j, k) - fdown(i, j - 1, k))
+               / (dyc(i, j, k) + dydown(i, j - 1, k));
+
+        dfdx = 0.25
+               * (fddx_xhigh(i - 1, j, k) + fddx_xhigh(i, j, k)
+                  + fddx_xhigh_down(i - 1, j - 1, k) + fddx_xhigh_down(i, j - 1, k));
+
+        fout =
+            0.25 * (ac(i, j, k) + adown(i, j - 1, k))
+            * (
+                // Component of flux from d/dz and d/dy
+                (Jc(i, j, k) * g23c(i, j, k) + Jdown(i, j - 1, k) * g23down(i, j - 1, k))
+                    * (dfdz - coef_yz * dfdy)
+                // Non-orthogonal mesh correction with g12 metric
+                + (Jc(i, j, k) * g12c(i, j, k)
+                   + Jdown(i, j + 1, k) * g12down(i, j + 1, k))
+                      * (dfdx - coef_xy * dfdy));
+
+        yzresult(i, j, k) -= fout / (dyc(i, j, k) * Jc(i, j, k));
+      }
+    }
+  }
+
+  // Calculate the Y derivative, including in X guard cells
+  // This is used to calculate X flux contribution from g12 * d/dy
+  Field3D fddy(mesh);
+  fddy.allocate();
+  fddy.setDirectionY(yzresult.getDirectionY());
+  for (int i = mesh->xstart - 1; i <= mesh->xend + 1; i++) {
+    for (int j = mesh->ystart; j <= mesh->yend; j++) {
+      for (int k = 0; k < mesh->LocalNz; k++) {
+        fddy(i, j, k) =
+            (fup(i, j + 1, k) - fdown(i, j - 1, k))
+            / (0.5 * dyup(i, j + 1, k) + dyc(i, j, k) + 0.5 * dydown(i, j - 1, k));
+      }
+    }
+  }
+
+  // Z flux
+
+  for (int i = mesh->xstart; i <= mesh->xend; i++) {
+    for (int j = mesh->ystart; j <= mesh->yend; j++) {
+      for (int k = 0; k < mesh->LocalNz; k++) {
+        // Calculate flux between k and k+1
+        int kp = (k + 1) % mesh->LocalNz;
+
+        BoutReal ddx =
+            0.5
+            * ((fc(i + 1, j, k) - fc(i - 1, j, k))
+                   / (0.5 * dxc(i + 1, j, k) + dxc(i, j, k) + 0.5 * dxc(i - 1, j, k))
+               + (fc(i + 1, j, kp) - fc(i - 1, j, kp))
+                     / (0.5 * dxc(i + 1, j, kp) + dxc(i, j, kp)
+                        + 0.5 * dxc(i - 1, j, kp)));
+
+        BoutReal ddy =
+            0.5
+            * ((fup(i, j + 1, k) - fdown(i, j - 1, k))
+                   / (0.5 * dyup(i, j + 1, k) + dyc(i, j, k) + 0.5 * dydown(i, j - 1, k))
+               + (fup(i, j + 1, kp) - fdown(i, j - 1, kp))
+                     / (0.5 * dyup(i, j + 1, kp) + dyc(i, j, kp)
+                        + 0.5 * dydown(i, j - 1, kp)));
+
+        BoutReal ddz = 2. * (fc(i, j, kp) - fc(i, j, k)) / (dzc(i, j, k) + dzc(i, j, kp));
+
+        BoutReal fout =
+            0.5 * (ac(i, j, k) + ac(i, j, kp))
+            * (
+                // Jg^xz (d/dx - g_xy / g_yy d/dy)
+                0.5
+                    * (Jc(i, j, k) * coord->g13(i, j, k)
+                       + Jc(i, j, kp) * coord->g13(i, j, kp))
+                    * (ddx
+                       - ddy * 0.5
+                             * (g_12c(i, j, k) / SQ(Jc(i, j, k) * Bxyc(i, j, k))
+                                + g_12c(i, j, kp) / SQ(Jc(i, j, kp) * Bxyc(i, j, kp))))
+                // Jg^zz (d/dz - g_yz / g_yy d/dy)
+                + 0.5
+                      * (Jc(i, j, k) * coord->g33(i, j, k)
+                         + Jc(i, j, kp) * coord->g33(i, j, kp))
+                      * (ddz
+                         - ddy * 0.5
+                               * (g_23c(i, j, k) / SQ(Jc(i, j, k) * Bxyc(i, j, k))
+                                  + g_23c(i, j, kp)
+                                        / SQ(Jc(i, j, kp) * Bxyc(i, j, kp)))));
+
+        yzresult(i, j, k) += fout / (Jc(i, j, k) * dzc(i, j, k));
+        yzresult(i, j, kp) -= fout / (Jc(i, j, kp) * dzc(i, j, kp));
+      }
+    }
+  }
+
+  // Check if we need to transform back
+  Field3D result;
+  if (f.hasParallelSlices() && a.hasParallelSlices()) {
+    result = yzresult;
+  } else {
+    result = fromFieldAligned(yzresult);
+    fddy = fromFieldAligned(fddy);
+  }
+
+  // Flux in X
+
+  for (int i = mesh->xstart - 1; i <= mesh->xend; i++) {
+    for (int j = mesh->ystart; j <= mesh->yend; j++) {
+      for (int k = 0; k < mesh->LocalNz; k++) {
+        // Calculate flux from i to i+1
+
+        const int kp = (k + 1) % mesh->LocalNz;
+        const int km = (k - 1 + mesh->LocalNz) % mesh->LocalNz;
+
+        BoutReal ddx = 2 * (f(i + 1, j, k) - f(i, j, k))
+                       / (coord->dx(i, j, k) + coord->dx(i + 1, j, k));
+        BoutReal ddy = 0.5 * (fddy(i, j, k) + fddy(i + 1, j, k));
+
+        BoutReal ddz =
+            0.5
+            * ((f(i, j, kp) - f(i, j, km))
+                   / (0.5 * coord->dz(i, j, kp) + coord->dz(i, j, k)
+                      + 0.5 * coord->dz(i, j, km))
+               + (f(i + 1, j, kp)
+                  - f(i + 1, j, km)
+                        / (0.5 * coord->dz(i + 1, j, kp) + coord->dz(i + 1, j, k)
+                           + 0.5 * coord->dz(i + 1, j, km))));
+
+        BoutReal fout =
+            0.5 * (a(i, j, k) + a(i + 1, j, k))
+            * (
+                // Jg^xx (d/dx - g_xy / g_yy d/dy)
+                0.5
+                    * (coord->J(i, j, k) * coord->g11(i, j, k)
+                       + coord->J(i + 1, j, k) * coord->g11(i + 1, j, k))
+                    * (ddx
+                       - ddy * 0.5
+                             * (coord->g_12(i, j, k) / coord->g_22(i, j, k)
+                                + coord->g_12(i + 1, j, k) / coord->g_22(i + 1, j, k)))
+                // Jg^xz (d/dz - g_yz / g_yy d/dy)
+                + 0.5
+                      * ((coord->J(i, j, k) * coord->g13(i, j, k)
+                          + coord->J(i + 1, j, k) * coord->g13(i + 1, j, k))
+                         * (ddz
+                            - ddy * 0.5
+                                  * (coord->g_23(i, j, k) / coord->g_22(i, j, k)
+                                     + coord->g_23(i + 1, j, k)
+                                           / coord->g_22(i + 1, j, k)))));
+
+        result(i, j, k) += fout / (coord->dx(i, j, k) * coord->J(i, j, k));
+        result(i + 1, j, k) -= fout / (coord->dx(i + 1, j, k) * coord->J(i + 1, j, k));
+      }
+    }
   }
 
   return result;
@@ -994,19 +1357,19 @@ const Field3D Div_a_Grad_perp_upwind_flows(const Field3D& a, const Field3D& f,
       for (int k = 0; k < mesh->LocalNz; k++) {
         // Calculate flux from i to i+1
 
-        const BoutReal gradient = (coord->J(i, j) * coord->g11(i, j)
-                                     + coord->J(i + 1, j) * coord->g11(i + 1, j))
+        const BoutReal gradient = (coord->J(i, j, k) * coord->g11(i, j, k)
+				   + coord->J(i + 1, j, k) * coord->g11(i + 1, j, k))
                                   * (f(i + 1, j, k) - f(i, j, k))
-                                  / (coord->dx(i, j) + coord->dx(i + 1, j));
+	  / (coord->dx(i, j, k) + coord->dx(i + 1, j, k));
 
         // Use the upwind coefficient
         const BoutReal fout = gradient * ((gradient > 0) ? a(i + 1, j, k) : a(i, j, k));
 
-        result(i, j, k) += fout / (coord->dx(i, j) * coord->J(i, j));
-        result(i + 1, j, k) -= fout / (coord->dx(i + 1, j) * coord->J(i + 1, j));
+        result(i, j, k) += fout / (coord->dx(i, j,k ) * coord->J(i, j, k));
+        result(i + 1, j, k) -= fout / (coord->dx(i + 1, j, k) * coord->J(i + 1, j, k));
 
         // Flow will be positive in the positive coordinate direction
-        flow_xlow(i + 1, j, k) = -1.0 * fout * coord->dy(i, j) * coord->dz(i, j);
+        flow_xlow(i + 1, j, k) = -1.0 * fout * coord->dy(i, j, k) * coord->dz(i, j, k);
       }
     }
 
@@ -1047,55 +1410,54 @@ const Field3D Div_a_Grad_perp_upwind_flows(const Field3D& a, const Field3D& f,
 
   for (int i = mesh->xstart; i <= mesh->xend; i++) {
     for (int j = mesh->ystart; j <= mesh->yend; j++) {
-
-      BoutReal coef_u =
-          0.5
-          * (coord->g_23(i, j) / SQ(coord->J(i, j) * coord->Bxy(i, j))
-             + coord->g_23(i, j + 1) / SQ(coord->J(i, j + 1) * coord->Bxy(i, j + 1)));
-
-      BoutReal coef_d =
-          0.5
-          * (coord->g_23(i, j) / SQ(coord->J(i, j) * coord->Bxy(i, j))
-             + coord->g_23(i, j - 1) / SQ(coord->J(i, j - 1) * coord->Bxy(i, j - 1)));
-
       for (int k = 0; k < mesh->LocalNz; k++) {
-        // Calculate flux between j and j+1
+	BoutReal coef_u =
+          0.5
+          * (coord->g_23(i, j, k) / SQ(coord->J(i, j, k) * coord->Bxy(i, j, k))
+             + coord->g_23(i, j + 1, k) / SQ(coord->J(i, j + 1, k) * coord->Bxy(i, j + 1, k)));
+
+	BoutReal coef_d =
+          0.5
+          * (coord->g_23(i, j, k) / SQ(coord->J(i, j, k) * coord->Bxy(i, j, k))
+             + coord->g_23(i, j - 1, k) / SQ(coord->J(i, j - 1, k) * coord->Bxy(i, j - 1, k)));
+
+	// Calculate flux between j and j+1
         int kp = (k + 1) % mesh->LocalNz;
         int km = (k - 1 + mesh->LocalNz) % mesh->LocalNz;
 
         // Calculate Z derivative at y boundary
         BoutReal dfdz =
             0.25 * (fc(i, j, kp) - fc(i, j, km) + fup(i, j + 1, kp) - fup(i, j + 1, km))
-            / coord->dz(i, j);
+	  / coord->dz(i, j, k);
 
         // Y derivative
         BoutReal dfdy = 2. * (fup(i, j + 1, k) - fc(i, j, k))
-                        / (coord->dy(i, j + 1) + coord->dy(i, j));
+	  / (coord->dy(i, j + 1, k) + coord->dy(i, j, k));
 
         BoutReal fout = 0.25 * (ac(i, j, k) + aup(i, j + 1, k))
-                            * (coord->J(i, j) * coord->g23(i, j)
-                               + coord->J(i, j + 1) * coord->g23(i, j + 1))
+	  * (coord->J(i, j, k) * coord->g23(i, j, k)
+	     + coord->J(i, j + 1, k) * coord->g23(i, j + 1, k))
                             * (dfdz - coef_u * dfdy);
 
-        yzresult(i, j, k) = fout / (coord->dy(i, j) * coord->J(i, j));
+        yzresult(i, j, k) = fout / (coord->dy(i, j, k) * coord->J(i, j, k));
 
         // Calculate flux between j and j-1
         dfdz = 0.25
                * (fc(i, j, kp) - fc(i, j, km) + fdown(i, j - 1, kp) - fdown(i, j - 1, km))
-               / coord->dz(i, j);
+	  / coord->dz(i, j, k);
 
         dfdy = 2. * (fc(i, j, k) - fdown(i, j - 1, k))
-               / (coord->dy(i, j) + coord->dy(i, j - 1));
+	  / (coord->dy(i, j, k) + coord->dy(i, j - 1, k));
 
         fout = 0.25 * (ac(i, j, k) + adown(i, j - 1, k))
-               * (coord->J(i, j) * coord->g23(i, j)
-                  + coord->J(i, j - 1) * coord->g23(i, j - 1))
+	  * (coord->J(i, j, k) * coord->g23(i, j, k)
+	     + coord->J(i, j - 1, k) * coord->g23(i, j - 1, k))
                * (dfdz - coef_d * dfdy);
 
-        yzresult(i, j, k) -= fout / (coord->dy(i, j) * coord->J(i, j));
+        yzresult(i, j, k) -= fout / (coord->dy(i, j, k) * coord->J(i, j, k));
 
         // Flow will be positive in the positive coordinate direction
-        flow_ylow(i, j, k) = -1.0 * fout * coord->dx(i, j) * coord->dz(i, j);
+        flow_ylow(i, j, k) = -1.0 * fout * coord->dx(i, j, k) * coord->dz(i, j, k);
       }
     }
   }
@@ -1105,18 +1467,18 @@ const Field3D Div_a_Grad_perp_upwind_flows(const Field3D& a, const Field3D& f,
 
   for (int i = mesh->xstart; i <= mesh->xend; i++) {
     for (int j = mesh->ystart; j <= mesh->yend; j++) {
-      // Coefficient in front of df/dy term
-      BoutReal coef = coord->g_23(i, j)
-                      / (coord->dy(i, j + 1) + 2. * coord->dy(i, j) + coord->dy(i, j - 1))
-                      / SQ(coord->J(i, j) * coord->Bxy(i, j));
-
       for (int k = 0; k < mesh->LocalNz; k++) {
-        // Calculate flux between k and k+1
+	// Coefficient in front of df/dy term
+	BoutReal coef = coord->g_23(i, j, k)
+	  / (coord->dy(i, j + 1, k) + 2. * coord->dy(i, j, k) + coord->dy(i, j - 1, k))
+	  / SQ(coord->J(i, j, k) * coord->Bxy(i, j, k));
+
+	// Calculate flux between k and k+1
         int kp = (k + 1) % mesh->LocalNz;
 
         BoutReal gradient =
             // df/dz
-            (fc(i, j, kp) - fc(i, j, k)) / coord->dz(i, j)
+	  (fc(i, j, kp) - fc(i, j, k)) / coord->dz(i, j, k)
 
             // - g_yz * df/dy / SQ(J*B)
             - coef
@@ -1125,8 +1487,8 @@ const Field3D Div_a_Grad_perp_upwind_flows(const Field3D& a, const Field3D& f,
 
         BoutReal fout = gradient * ((gradient > 0) ? ac(i, j, kp) : ac(i, j, k));
 
-        yzresult(i, j, k) += fout / coord->dz(i, j);
-        yzresult(i, j, kp) -= fout / coord->dz(i, j);
+        yzresult(i, j, k) += fout / coord->dz(i, j, k);
+        yzresult(i, j, kp) -= fout / coord->dz(i, j, kp);
       }
     }
   }

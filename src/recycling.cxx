@@ -149,12 +149,13 @@ void Recycling::transform(Options& state) {
 
   // Get metric tensor components
   Coordinates* coord = mesh->getCoordinates();
-  const Field2D& J = coord->J;
-  const Field2D& dy = coord->dy;
-  const Field2D& dx = coord->dx;
-  const Field2D& dz = coord->dz;
-  const Field2D& g_22 = coord->g_22;
-  const Field2D& g11 = coord->g11;
+
+  const Coordinates::FieldMetric& J = coord->J;
+  const Coordinates::FieldMetric& dy = coord->dy;
+  const Coordinates::FieldMetric& dx = coord->dx;
+  const Coordinates::FieldMetric& dz = coord->dz;
+  const Coordinates::FieldMetric& g_22 = coord->g_22;
+  const Coordinates::FieldMetric& g11 = coord->g11;
 
   for (const auto& channel : channels) {
     const Options& species_from = state["species"][channel.from];
@@ -212,10 +213,10 @@ void Recycling::transform(Options& state) {
           // Flow of recycled neutrals into domain [s-1]
           BoutReal flow =
               channel.target_multiplier * flux
-              * (J(r.ind, mesh->ystart) + J(r.ind, mesh->ystart - 1)) / (sqrt(g_22(r.ind, mesh->ystart)) + sqrt(g_22(r.ind, mesh->ystart - 1)))
-              * 0.5*(dx(r.ind, mesh->ystart) + dx(r.ind, mesh->ystart - 1)) * 0.5*(dz(r.ind, mesh->ystart) + dz(r.ind, mesh->ystart - 1));  
+	    * (J(r.ind, mesh->ystart, jz) + J(r.ind, mesh->ystart - 1, jz)) / (sqrt(g_22(r.ind, mesh->ystart, jz)) + sqrt(g_22(r.ind, mesh->ystart - 1, jz)))
+	    * 0.5*(dx(r.ind, mesh->ystart, jz) + dx(r.ind, mesh->ystart - 1, jz)) * 0.5*(dz(r.ind, mesh->ystart, jz) + dz(r.ind, mesh->ystart - 1, jz));  
 
-          BoutReal volume  = J(r.ind, mesh->ystart) * dx(r.ind, mesh->ystart) * dy(r.ind, mesh->ystart) * dz(r.ind, mesh->ystart);
+          BoutReal volume  = J(r.ind, mesh->ystart, jz) * dx(r.ind, mesh->ystart, jz) * dy(r.ind, mesh->ystart, jz) * dz(r.ind, mesh->ystart, jz);
 
           // Calculate sources in the final cell [m^-3 s^-1]
           target_recycle_density_source(r.ind, mesh->ystart, jz) += flow / volume;    // For diagnostic 
@@ -254,10 +255,10 @@ void Recycling::transform(Options& state) {
           // Flow of recycled neutrals into domain [s-1]
           BoutReal flow =
               channel.target_multiplier * flux 
-              * (J(r.ind, mesh->yend) + J(r.ind, mesh->yend + 1)) / (sqrt(g_22(r.ind, mesh->yend)) + sqrt(g_22(r.ind, mesh->yend + 1)))
-              * 0.5*(dx(r.ind, mesh->yend) + dx(r.ind, mesh->yend + 1)) * 0.5*(dz(r.ind, mesh->yend) + dz(r.ind, mesh->yend + 1)); 
+	    * (J(r.ind, mesh->yend, jz) + J(r.ind, mesh->yend + 1, jz)) / (sqrt(g_22(r.ind, mesh->yend, jz)) + sqrt(g_22(r.ind, mesh->yend + 1, jz)))
+	    * 0.5*(dx(r.ind, mesh->yend, jz) + dx(r.ind, mesh->yend + 1, jz)) * 0.5*(dz(r.ind, mesh->yend, jz) + dz(r.ind, mesh->yend + 1, jz)); 
 
-          BoutReal volume  = J(r.ind, mesh->yend) * dx(r.ind, mesh->yend) * dy(r.ind, mesh->yend) * dz(r.ind, mesh->yend);
+          BoutReal volume  = J(r.ind, mesh->yend, jz) * dx(r.ind, mesh->yend, jz) * dy(r.ind, mesh->yend, jz) * dz(r.ind, mesh->yend, jz);
 
           // Calculate sources in the final cell [m^-3 s^-1]
           target_recycle_density_source(r.ind, mesh->yend, jz) += flow / volume;    // For diagnostic 
@@ -315,8 +316,8 @@ void Recycling::transform(Options& state) {
           for(int iz=0; iz < mesh->LocalNz; iz++){
 
             // Volume of cell adjacent to wall which will receive source
-            BoutReal volume = J(mesh->xend, iy) * dx(mesh->xend, iy)
-                 * dy(mesh->xend, iy) * dz(mesh->xend, iy);
+            BoutReal volume = J(mesh->xend, iy, iz) * dx(mesh->xend, iy, iz)
+	      * dy(mesh->xend, iy, iz) * dz(mesh->xend, iy, iz);
 
             // If cell is a pump, overwrite multiplier with pump multiplier
             BoutReal multiplier = channel.sol_multiplier;
@@ -417,8 +418,8 @@ void Recycling::transform(Options& state) {
             for(int iz=0; iz < mesh->LocalNz; iz++){
             
               // Volume of cell adjacent to wall which will receive source
-              BoutReal volume = J(mesh->xstart, iy) * dx(mesh->xstart, iy)
-                  * dy(mesh->xstart, iy) * dz(mesh->xstart, iy);
+              BoutReal volume = J(mesh->xstart, iy, iz) * dx(mesh->xstart, iy, iz)
+		* dy(mesh->xstart, iy, iz) * dz(mesh->xstart, iy, iz);
 
               // If cell is a pump, overwrite multiplier with pump multiplier
               BoutReal multiplier = channel.pfr_multiplier;

@@ -64,6 +64,15 @@ const Field2D Laplace_FV(const Field2D& k, const Field2D& f);
 const Field3D Div_a_Grad_perp_upwind(const Field3D& a, const Field3D& f);
 /// Version of function that returns flows
 const Field3D Div_a_Grad_perp_upwind_flows(const Field3D& a, const Field3D& f, Field3D& flux_xlow, Field3D& flux_ylow);
+/*!
+ * Div ( a Grad_perp(f) ) -- ∇⊥ ( a ⋅ ∇⊥ f) -- Vorticity
+ *
+ * This version includes corrections for non-orthogonal meshes
+ * in which the g12 and g13 components can be non-zero
+ * i.e. X-Y, X-Z and Y-Z coordinates can all be non-orthogonal.
+ */
+const Field3D Div_a_Grad_perp_nonorthog(const Field3D& a, const Field3D& x);
+
 
 /// Version with energy flow diagnostic
 const Field3D Div_par_K_Grad_par_mod(const Field3D& k, const Field3D& f, Field3D& flow_ylow,
@@ -164,23 +173,21 @@ const Field3D Div_par_fvv(const Field3D& f_in, const Field3D& v_in,
     for (int j = ys; j <= ye; j++) {
       // Pre-calculate factors which multiply fluxes
 
-      // For right cell boundaries
-      BoutReal common_factor = (coord->J(i, j) + coord->J(i, j + 1))
-                               / (sqrt(coord->g_22(i, j)) + sqrt(coord->g_22(i, j + 1)));
-
-      BoutReal flux_factor_rc = common_factor / (coord->dy(i, j) * coord->J(i, j));
-      BoutReal flux_factor_rp =
-          common_factor / (coord->dy(i, j + 1) * coord->J(i, j + 1));
-
-      // For left cell boundaries
-      common_factor = (coord->J(i, j) + coord->J(i, j - 1))
-                      / (sqrt(coord->g_22(i, j)) + sqrt(coord->g_22(i, j - 1)));
-
-      BoutReal flux_factor_lc = common_factor / (coord->dy(i, j) * coord->J(i, j));
-      BoutReal flux_factor_lm =
-          common_factor / (coord->dy(i, j - 1) * coord->J(i, j - 1));
 
       for (int k = 0; k < mesh->LocalNz; k++) {
+	// For right cell boundaries
+	BoutReal common_factor = (coord->J(i, j, k) + coord->J(i, j + 1, k))
+	  / (sqrt(coord->g_22(i, j, k)) + sqrt(coord->g_22(i, j + 1, k)));
+	
+	BoutReal flux_factor_rc = common_factor / (coord->dy(i, j, k) * coord->J(i, j, k));
+	BoutReal flux_factor_rp = common_factor / (coord->dy(i, j + 1, k) * coord->J(i, j + 1, k));
+	
+	// For left cell boundaries
+	common_factor = (coord->J(i, j, k) + coord->J(i, j - 1, k))
+	  / (sqrt(coord->g_22(i, j, k)) + sqrt(coord->g_22(i, j - 1, k)));
+	
+	BoutReal flux_factor_lc = common_factor / (coord->dy(i, j, k) * coord->J(i, j, k));
+	BoutReal flux_factor_lm = common_factor / (coord->dy(i, j - 1, k) * coord->J(i, j - 1, k));
 
         ////////////////////////////////////////////
         // Reconstruct f at the cell faces
@@ -499,6 +506,7 @@ const Field3D Div_par_mod(const Field3D& f_in, const Field3D& v_in,
 
   ASSERT1_FIELDS_COMPATIBLE(f_in, v_in);
   ASSERT1_FIELDS_COMPATIBLE(f_in, wave_speed_in);
+
 
   Mesh* mesh = f_in.getMesh();
 
