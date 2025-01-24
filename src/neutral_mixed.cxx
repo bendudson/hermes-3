@@ -31,7 +31,19 @@ NeutralMixed::NeutralMixed(const std::string& name, Options& alloptions, Solver*
   // Evolving variables e.g name is "h" or "h+"
   solver->add(Nn, std::string("N") + name);
   solver->add(Pn, std::string("P") + name);
-  solver->add(NVn, std::string("NV") + name);
+  
+
+  evolve_momentum = options["evolve_momentum"]
+  .doc("Evolve parallel neutral momentum?")
+  .withDefault<bool>(true);
+
+  if (evolve_momentum) {
+    solver->add(NVn, std::string("NV") + name);
+  } else {
+    output_warn.write("WARNING: Not evolving neutral parallel momentum. NVn and Vn set to zero\n");
+    NVn = 0.0;
+    Vn = 0.0;
+  }
 
   sheath_ydown = options["sheath_ydown"]
                      .doc("Enable wall boundary conditions at ydown")
@@ -318,7 +330,7 @@ void NeutralMixed::finally(const Options& state) {
   /////////////////////////////////////////////////////
   // Neutral density
   TRACE("Neutral density");
-  ddt(Nn) = -FV::Div_par_mod<hermes::Limiter>(Nn, Vn, sound_speed) // Advection
+  ddt(Nn) = -FV::Div_par_mod<hermes::Limiter>(Nn, Vn, sound_speed, particle_flow_ylow) // Advection
             + FV::Div_a_Grad_perp(DnnNn, logPnlim) // Perpendicular diffusion
       ;
 
@@ -328,47 +340,56 @@ void NeutralMixed::finally(const Options& state) {
   }
   ddt(Nn) += Sn; // Always add density_source
 
-  /////////////////////////////////////////////////////
-  // Neutral momentum
-  TRACE("Neutral momentum");
+  if (evolve_momentum) {
 
-  ddt(NVn) =
-      -AA * FV::Div_par_fvv<hermes::Limiter>(Nnlim, Vn, sound_speed) // Momentum flow
-      - Grad_par(Pn)                                                 // Pressure gradient
-      + FV::Div_a_Grad_perp(DnnNVn, logPnlim) // Perpendicular diffusion
-      ;
+    /////////////////////////////////////////////////////
+    // Neutral momentum
+    TRACE("Neutral momentum");
 
-  if (neutral_viscosity) {
-    // NOTE: The following viscosity terms are are not (yet) balanced
-    //       by a viscous heating term
+    ddt(NVn) =
+        -AA * FV::Div_par_fvv<hermes::Limiter>(Nnlim, Vn, sound_speed) // Momentum flow
+        - Grad_par(Pn)                                                 // Pressure gradient
+        + FV::Div_a_Grad_perp(DnnNVn, logPnlim) // Perpendicular diffusion
+        ;
 
-    // Relationship between heat conduction and viscosity for neutral
-    // gas Chapman, Cowling "The Mathematical Theory of Non-Uniform
-    // Gases", CUP 1952 Ferziger, Kaper "Mathematical Theory of
-    // Transport Processes in Gases", 1972
-    // eta_n = (2. / 5) * kappa_n;
-    //
+    if (neutral_viscosity) {
+      // NOTE: The following viscosity terms are are not (yet) balanced
+      //       by a viscous heating term
 
-    ddt(NVn) += AA * FV::Div_a_Grad_perp((2. / 5) * DnnNn, Vn)    // Perpendicular viscosity
-              + AA * FV::Div_par_K_Grad_par((2. / 5) * DnnNn, Vn) // Parallel viscosity
-      ;
-  }
+      // Relationship between heat conduction and viscosity for neutral
+      // gas Chapman, Cowling "The Mathematical Theory of Non-Uniform
+      // Gases", CUP 1952 Ferziger, Kaper "Mathematical Theory of
+      // Transport Processes in Gases", 1972
+      // eta_n = (2. / 5) * kappa_n;
+      //
 
-  if (localstate.isSet("momentum_source")) {
-    Snv = get<Field3D>(localstate["momentum_source"]);
-    ddt(NVn) += Snv;
+      ddt(NVn) += AA * FV::Div_a_Grad_perp((2. / 5) * DnnNn, Vn)    // Perpendicular viscosity
+                + AA * FV::Div_par_K_Grad_par((2. / 5) * DnnNn, Vn) // Parallel viscosity
+        ;
+    }
+
+    if (localstate.isSet("momentum_source")) {
+      Snv = get<Field3D>(localstate["momentum_source"]);
+      ddt(NVn) += Snv;
+    }
+
+  } else {
+    ddt(NVn) = 0;
+    Snv = 0;
   }
 
   /////////////////////////////////////////////////////
   // Neutral pressure
   TRACE("Neutral pressure");
 
-  ddt(Pn) = -FV::Div_par_mod<hermes::Limiter>(Pn, Vn, sound_speed) // Advection
+  ddt(Pn) = -FV::Div_par_mod<hermes::Limiter>(Pn, Vn, sound_speed, energy_flow_ylow) // Advection
             - (2. / 3) * Pn * Div_par(Vn)                          // Compression
             + FV::Div_a_Grad_perp(DnnPn, logPnlim) // Perpendicular diffusion
             + FV::Div_a_Grad_perp(DnnNn, Tn)       // Conduction
             + FV::Div_par_K_Grad_par(DnnNn, Tn)    // Parallel conduction
       ;
+
+  energy_flow_ylow *= 5./2;
 
   Sp = pressure_source;
   if (localstate.isSet("energy_source")) {
@@ -533,6 +554,8 @@ void NeutralMixed::precon(const Options& state, BoutReal gamma) {
   inv->setCoefD(coef);
 
   ddt(Nn) = inv->solve(ddt(Nn));
-  ddt(NVn) = inv->solve(ddt(NVn));
+  if (evolve_momentum) {
+    ddt(NVn) = inv->solve(ddt(NVn));
+  }
   ddt(Pn) = inv->solve(ddt(Pn));
 }

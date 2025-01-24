@@ -1,6 +1,7 @@
 
 #include <bout/constants.hxx>
 #include <bout/fv_ops.hxx>
+#include <bout/field_factory.hxx>
 #include <bout/derivs.hxx>
 #include <bout/difops.hxx>
 #include <bout/output_bout_types.hxx>
@@ -102,18 +103,34 @@ EvolvePressure::EvolvePressure(std::string name, Options& alloptions, Solver* so
   const BoutReal Tnorm = units["eV"];
   const BoutReal Omega_ci = 1. / units["seconds"].as<BoutReal>();
 
+  auto& p_options = alloptions[std::string("P") + name];
+  source_normalisation = SI::qe * Nnorm * Tnorm * Omega_ci;   // [Pa/s] or [W/m^3] if converted to energy
+  time_normalisation = 1./Omega_ci;   // [s]
+  
   // Try to read the pressure source from the mesh
   // Units of Pascals per second
   source = 0.0;
   mesh->get(source, std::string("P") + name + "_src");
   // Allow the user to override the source
-  source = alloptions[std::string("P") + name]["source"]
+  source = p_options["source"]
                .doc(std::string("Source term in ddt(P") + name
-                    + std::string("). Units [N/m^2/s]"))
+                    + std::string("). Units [Pa/s], note P = 2/3 E"))
                .withDefault(source)
-           / (SI::qe * Nnorm * Tnorm * Omega_ci);
+           / (source_normalisation);
 
-  if (alloptions[std::string("P") + name]["source_only_in_core"]
+  source_time_dependent = p_options["source_time_dependent"]
+    .doc("Use a time-dependent source?")
+    .withDefault<bool>(false);
+
+  // If time dependent, parse the function with respect to time from the input file
+  if (source_time_dependent) {
+    auto str = p_options["source_prefactor"]
+      .doc("Time-dependent function of multiplier on ddt(P" + name + std::string(") source."))
+      .as<std::string>();
+      source_prefactor_function = FieldFactory::get()->parse(str, &p_options);
+  }
+
+  if (p_options["source_only_in_core"]
       .doc("Zero the source outside the closed field-line region?")
       .withDefault<bool>(false)) {
     for (int x = mesh->xstart; x <= mesh->xend; x++) {
@@ -128,9 +145,19 @@ EvolvePressure::EvolvePressure(std::string name, Options& alloptions, Solver* so
     }
   }
 
-  neumann_boundary_average_z = alloptions[std::string("P") + name]["neumann_boundary_average_z"]
+  neumann_boundary_average_z = p_options["neumann_boundary_average_z"]
     .doc("Apply neumann boundary with Z average?")
     .withDefault<bool>(false);
+
+  numerical_viscous_heating = options["numerical_viscous_heating"]
+    .doc("Include heating due to numerical viscosity?")
+    .withDefault<bool>(false);
+
+  if (numerical_viscous_heating) {
+    fix_momentum_boundary_flux = options["fix_momentum_boundary_flux"]
+      .doc("Fix Y boundary momentum flux to boundary midpoint value?")
+      .withDefault<bool>(false);
+  }
 }
 
 void EvolvePressure::transform(Options& state) {
@@ -199,6 +226,7 @@ void EvolvePressure::finally(const Options& state) {
 
   // Get updated pressure and temperature with boundary conditions
   // Note: Retain pressures which fall below zero
+  P.clearParallelSlices();
   P.setBoundaryTo(get<Field3D>(species["pressure"]));
   Field3D Pfloor = floor(P, 0.0); // Restricted to never go below zero
 
@@ -230,7 +258,7 @@ void EvolvePressure::finally(const Options& state) {
 
     if (p_div_v) {
       // Use the P * Div(V) form
-      ddt(P) -= FV::Div_par_mod<hermes::Limiter>(P, V, fastest_wave);
+      ddt(P) -= FV::Div_par_mod<hermes::Limiter>(P, V, fastest_wave, flow_ylow);
 
       // Work done. This balances energetically a term in the momentum equation
       ddt(P) -= (2. / 3) * Pfloor * Div_par(V);
@@ -240,9 +268,29 @@ void EvolvePressure::finally(const Options& state) {
       // Note: A mixed form has been tried (on 1D neon example)
       //       -(4/3)*FV::Div_par(P,V) + (1/3)*(V * Grad_par(P) - P * Div_par(V))
       //       Caused heating of charged species near sheath like p_div_v
-      ddt(P) -= (5. / 3) * FV::Div_par_mod<hermes::Limiter>(P, V, fastest_wave);
+      ddt(P) -= (5. / 3) * FV::Div_par_mod<hermes::Limiter>(P, V, fastest_wave, flow_ylow);
 
       ddt(P) += (2. / 3) * V * Grad_par(P);
+    }
+    flow_ylow *= 5. / 2; // Energy flow
+
+    if (state.isSection("fields") and state["fields"].isSet("Apar_flutter")) {
+      // Magnetic flutter term
+      const Field3D Apar_flutter = get<Field3D>(state["fields"]["Apar_flutter"]);
+      ddt(P) -= (5. / 3) * Div_n_g_bxGrad_f_B_XZ(P, V, -Apar_flutter);
+      ddt(P) += (2. / 3) * V * bracket(P, Apar_flutter, BRACKET_ARAKAWA);
+    }
+
+    if (numerical_viscous_heating || diagnose) {
+      // Viscous heating coming from numerical viscosity
+      Field3D Nlim = floor(N, density_floor);
+      const BoutReal AA = get<BoutReal>(species["AA"]); // Atomic mass
+      Sp_nvh = (2. / 3) * AA * FV::Div_par_fvv_heating(Nlim, V, fastest_wave, flow_ylow_kinetic, fix_momentum_boundary_flux);
+      flow_ylow_kinetic *= AA;
+      flow_ylow += flow_ylow_kinetic;
+      if (numerical_viscous_heating) {
+        ddt(P) += Sp_nvh;
+      }
     }
   }
 
@@ -321,7 +369,23 @@ void EvolvePressure::finally(const Options& state) {
 
     // Note: Flux through boundary turned off, because sheath heat flux
     // is calculated and removed separately
-    ddt(P) += (2. / 3) * FV::Div_par_K_Grad_par(kappa_par, T, false);
+    flow_ylow_conduction;
+    ddt(P) += (2. / 3) * Div_par_K_Grad_par_mod(kappa_par, T, flow_ylow_conduction, false);
+    flow_ylow += flow_ylow_conduction;
+
+    if (state.isSection("fields") and state["fields"].isSet("Apar_flutter")) {
+      // Magnetic flutter term. The operator splits into 4 pieces:
+      // Div(k b b.Grad(T)) = Div(k b0 b0.Grad(T)) + Div(k d0 db.Grad(T))
+      //                    + Div(k db b0.Grad(T)) + Div(k db db.Grad(T))
+      // The first term is already calculated above.
+      // Here we add the terms containing db
+      const Field3D Apar_flutter = get<Field3D>(state["fields"]["Apar_flutter"]);
+      Field3D db_dot_T = bracket(T, Apar_flutter, BRACKET_ARAKAWA);
+      Field3D b0_dot_T = Grad_par(T);
+      mesh->communicate(db_dot_T, b0_dot_T);
+      ddt(P) += (2. / 3) * (Div_par(kappa_par * db_dot_T) -
+                            Div_n_g_bxGrad_f_B_XZ(kappa_par, db_dot_T + b0_dot_T, Apar_flutter));
+    }
   }
 
   if (hyper_z > 0.) {
@@ -335,10 +399,24 @@ void EvolvePressure::finally(const Options& state) {
   //////////////////////
   // Other sources
 
-  Sp = source;
+  if (source_time_dependent) {
+    // Evaluate the source_prefactor function at the current time in seconds and scale source with it
+    BoutReal time = get<BoutReal>(state["time"]);
+    BoutReal source_prefactor = source_prefactor_function ->generate(bout::generator::Context().set("x",0,"y",0,"z",0,"t",time*time_normalisation));
+    final_source = source * source_prefactor;
+  } else {
+    final_source = source;
+  }
+
+  Sp = final_source;
   if (species.isSet("energy_source")) {
     Sp += (2. / 3) * get<Field3D>(species["energy_source"]); // For diagnostic output
   }
+#if CHECKLEVEL >= 1
+  if (species.isSet("pressure_source")) {
+    throw BoutException("Components must evolve `energy_source` rather then `pressure_source`");
+  }
+#endif
   ddt(P) += Sp;
 
   // Term to force evolved P towards N * T
@@ -369,7 +447,7 @@ void EvolvePressure::finally(const Options& state) {
       flow_xlow = get<Field3D>(species["energy_flow_xlow"]);
     }
     if (species.isSet("energy_flow_ylow")) {
-      flow_ylow = get<Field3D>(species["energy_flow_ylow"]);
+      flow_ylow += get<Field3D>(species["energy_flow_ylow"]);
     }
   }
 }
@@ -401,7 +479,7 @@ void EvolvePressure::outputVars(Options& state) {
       set_with_attrs(state[std::string("kappa_par_") + name], kappa_par,
                      {{"time_dimension", "t"},
                       {"units", "W / m / eV"},
-                      {"conversion", Pnorm * Omega_ci * SQ(rho_s0)},
+                      {"conversion", (Pnorm * Omega_ci * SQ(rho_s0) )/ Tnorm},
                       {"long_name", name + " heat conduction coefficient"},
                       {"species", name},
                       {"source", "evolve_pressure"}});
@@ -432,7 +510,7 @@ void EvolvePressure::outputVars(Options& state) {
                     {"species", name},
                     {"source", "evolve_pressure"}});
 
-    set_with_attrs(state[std::string("P") + name + std::string("_src")], source,
+    set_with_attrs(state[std::string("P") + name + std::string("_src")], final_source,
                    {{"time_dimension", "t"},
                     {"units", "Pa s^-1"},
                     {"conversion", Pnorm * Omega_ci},
@@ -442,7 +520,7 @@ void EvolvePressure::outputVars(Options& state) {
                     {"source", "evolve_pressure"}});
 
     if (flow_xlow.isAllocated()) {
-      set_with_attrs(state[std::string("EnergyFlow_") + name + std::string("_xlow")], flow_xlow,
+      set_with_attrs(state[fmt::format("ef{}_tot_xlow", name)], flow_xlow,
                    {{"time_dimension", "t"},
                     {"units", "W"},
                     {"conversion", rho_s0 * SQ(rho_s0) * Pnorm * Omega_ci},
@@ -452,12 +530,41 @@ void EvolvePressure::outputVars(Options& state) {
                     {"source", "evolve_pressure"}});
     }
     if (flow_ylow.isAllocated()) {
-      set_with_attrs(state[std::string("EnergyFlow_") + name + std::string("_ylow")], flow_ylow,
+      set_with_attrs(state[fmt::format("ef{}_tot_ylow", name)], flow_ylow,
                    {{"time_dimension", "t"},
                     {"units", "W"},
                     {"conversion", rho_s0 * SQ(rho_s0) * Pnorm * Omega_ci},
                     {"standard_name", "power"},
                     {"long_name", name + " power through Y cell face. Note: May be incomplete."},
+                    {"species", name},
+                    {"source", "evolve_pressure"}});
+                    
+      set_with_attrs(state[fmt::format("ef{}_cond_ylow", name)], flow_ylow_conduction,
+                   {{"time_dimension", "t"},
+                    {"units", "W"},
+                    {"conversion", rho_s0 * SQ(rho_s0) * Pnorm * Omega_ci},
+                    {"standard_name", "power"},
+                    {"long_name", name + " conduction through Y cell face. Note: May be incomplete."},
+                    {"species", name},
+                    {"source", "evolve_pressure"}});
+
+      set_with_attrs(state[fmt::format("ef{}_kin_ylow", name)], flow_ylow_kinetic,
+                   {{"time_dimension", "t"},
+                    {"units", "W"},
+                    {"conversion", rho_s0 * SQ(rho_s0) * Pnorm * Omega_ci},
+                    {"standard_name", "power"},
+                    {"long_name", name + " kinetic energy flow through Y cell face. Note: May be incomplete."},
+                    {"species", name},
+                    {"source", "evolve_pressure"}});
+    }
+
+    if (numerical_viscous_heating) {
+      set_with_attrs(state[std::string("E") + name + std::string("_nvh")], Sp_nvh * 3/.2,
+                   {{"time_dimension", "t"},
+                    {"units", "W"},
+                    {"conversion", Pnorm * Omega_ci},
+                    {"standard_name", "energy source"},
+                    {"long_name", name + " energy source from numerical viscous heating"},
                     {"species", name},
                     {"source", "evolve_pressure"}});
     }

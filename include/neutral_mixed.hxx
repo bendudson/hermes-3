@@ -52,6 +52,7 @@ private:
   BoutReal diffusion_limit;    ///< Maximum diffusion coefficient
 
   bool neutral_viscosity; ///< include viscosity?
+  bool evolve_momentum; ///< Evolve parallel momentum?
 
   bool precondition {true}; ///< Enable preconditioner?
   std::unique_ptr<Laplacian> inv; ///< Laplacian inversion used for preconditioning
@@ -61,6 +62,9 @@ private:
 
   bool output_ddt; ///< Save time derivatives?
   bool diagnose; ///< Save additional diagnostics?
+
+  Field3D particle_flow_ylow; ///< Flow diagnostics
+  Field3D energy_flow_ylow;
 };
 
 namespace {

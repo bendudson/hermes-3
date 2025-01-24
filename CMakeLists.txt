@@ -6,7 +6,7 @@ else()
   cmake_policy(VERSION 3.12)
 endif()
 
-project(hermes-3 LANGUAGES CXX)
+project(hermes-3 LANGUAGES CXX C)
 
 # Extra CMake scripts in cmake/ subdirectory
 set(CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake" ${CMAKE_MODULE_PATH})
@@ -43,7 +43,8 @@ message(STATUS "Git revision: ${HERMES_REVISION}")
 option(HERMES_BUILD_BOUT "Build BOUT++ in external/BOUT-dev" ON)
 if(HERMES_BUILD_BOUT)
   set(BOUT_BUILD_EXAMPLES, OFF) # Don't create example makefiles
-  add_subdirectory(external/BOUT-dev)
+  set(HERMES_BOUT_SRC "external/BOUT-dev" CACHE STRING "Directory of BOUT++ dir")
+  add_subdirectory(${HERMES_BOUT_SRC} ${CMAKE_CURRENT_BINARY_DIR}/external/BOUT-dev)
 else()
   find_package(bout++ REQUIRED)
 endif()
@@ -93,6 +94,8 @@ set(HERMES_SOURCES
     src/hydrogen_charge_exchange.cxx
     src/solkit_hydrogen_charge_exchange.cxx
     src/upstream_density_feedback.cxx
+    src/temperature_feedback.cxx
+    src/detachment_controller.cxx
     src/thermal_force.cxx
     src/ion_viscosity.cxx
     src/transform.cxx
@@ -149,10 +152,13 @@ set(HERMES_SOURCES
     include/sound_speed.hxx
     include/thermal_force.hxx
     include/upstream_density_feedback.hxx
+    include/temperature_feedback.hxx
+    include/detachment_controller.hxx
     include/vorticity.hxx
     include/zero_current.hxx
     include/transform.hxx
     include/fixed_fraction_radiation.hxx
+    include/simple_pump.hxx
     )
 
 # Compile Hermes sources into a library, which can be used for unit tests
@@ -218,6 +224,8 @@ if(HERMES_TESTS)
   hermes_add_integrated_test(vorticity)
   hermes_add_integrated_test(sod-shock)
   hermes_add_integrated_test(sod-shock-energy)
+  hermes_add_integrated_test(drift-wave)
+  hermes_add_integrated_test(alfven-wave)
 
   # Unit tests
   option(HERMES_UNIT_TESTS "Build the unit tests" ON)
@@ -242,7 +250,7 @@ endif()
 # Compile-time options
 
 set(SLOPE_LIMITERS MinMod MC Upwind Superbee)
-set(HERMES_SLOPE_LIMITER MinMod CACHE STRING "Set advection slope limiter")
+set(HERMES_SLOPE_LIMITER MC CACHE STRING "Set advection slope limiter")
 set_property(CACHE HERMES_SLOPE_LIMITER PROPERTY STRINGS ${SLOPE_LIMITERS})
 message(STATUS "Slope limiter: ${HERMES_SLOPE_LIMITER}")
 
@@ -257,3 +265,9 @@ endif()
 
 configure_file(include/hermes_build_config.hxx.in include/hermes_build_config.hxx)
 
+# Installation
+if (BUILD_SHARED_LIBS)
+  install(TARGETS hermes-3 hermes-3-lib)
+else()
+  install(TARGETS hermes-3)
+endif()

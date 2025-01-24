@@ -33,13 +33,13 @@ Collisions::Collisions(std::string name, Options& alloptions, Solver*) {
                      .withDefault<bool>(true);
   electron_neutral = options["electron_neutral"]
                          .doc("Include electron-neutral elastic collisions?")
-                         .withDefault<bool>(true);
+                         .withDefault<bool>(false);
   ion_ion = options["ion_ion"]
                 .doc("Include ion-ion elastic collisions?")
                 .withDefault<bool>(true);
   ion_neutral = options["ion_neutral"]
                     .doc("Include ion-neutral elastic collisions?")
-                    .withDefault<bool>(true);
+                    .withDefault<bool>(false);
   neutral_neutral = options["neutral_neutral"]
                         .doc("Include neutral-neutral elastic collisions?")
                         .withDefault<bool>(true);
@@ -47,6 +47,10 @@ Collisions::Collisions(std::string name, Options& alloptions, Solver*) {
   frictional_heating = options["frictional_heating"]
     .doc("Include R dot v heating term as energy source?")
     .withDefault<bool>(true);
+
+  ei_multiplier = options["ei_multiplier"]
+                      .doc("User-set arbitrary multiplier on electron-ion collision rate")
+                      .withDefault<BoutReal>(1.0);
 
   diagnose =
       options["diagnose"].doc("Output additional diagnostics?").withDefault<bool>(false);
@@ -99,7 +103,7 @@ void Collisions::collide(Options& species1, Options& species2, const Field3D& nu
                                     : 0.0;
 
       // F12 is the force on species 1 due to species 2 (normalised)
-      const Field3D F12 = nu_12 * A1 * density1 * (velocity2 - velocity1);
+      const Field3D F12 = momentum_coefficient * nu_12 * A1 * density1 * (velocity2 - velocity1);
 
       add(species1["momentum_source"], F12);
       subtract(species2["momentum_source"], F12);
@@ -214,7 +218,7 @@ void Collisions::transform(Options& state) {
               ((Te[i] < 0.1) || (Ni[i] < 1e10) || (Ne[i] < 1e10)) ? 10
               : (Te[i] < Ti[i] * me_mi)
                   ? 23 - 0.5 * log(Ni[i]) + 1.5 * log(Ti[i]) - log(SQ(Zi) * Ai)
-              : (Te[i] < 10 * SQ(Zi))
+              : (Te[i] < exp(2) * SQ(Zi)) // Fix to ei coulomb log from S.Mijin ReMKiT1D
                   // Ti m_e/m_i < Te < 10 Z^2
                   ? 30.0 - 0.5 * log(Ne[i]) - log(Zi) + 1.5 * log(Te[i])
                   // Ti m_e/m_i < 10 Z^2 < Te
@@ -227,7 +231,8 @@ void Collisions::transform(Options& state) {
           // Collision frequency
           const BoutReal nu = SQ(SQ(SI::qe) * Zi) * floor(Ni[i], 0.0)
                               * floor(coulomb_log, 1.0) * (1. + me_mi)
-                              / (3 * pow(PI * (vesq + visq), 1.5) * SQ(SI::e0 * SI::Me));
+                              / (3 * pow(PI * (vesq + visq), 1.5) * SQ(SI::e0 * SI::Me))
+                              * ei_multiplier;
 #if CHECK >= 2
 	  if (!std::isfinite(nu)) {
 	    throw BoutException("Collisions 195 {}: {} at {}: Ni {}, Ne {}, Clog {}, vesq {}, visq {}, Te {}, Ti {}\n",
