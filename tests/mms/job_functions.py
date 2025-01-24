@@ -12,8 +12,12 @@ def collectvar(datasets, var, mesh=0):
 
 def run_manufactured_solutions_test(test_input):
    # expand inputs from input dictionary
+   # the number of grids generated
    ntest = test_input["ntest"]
+   # the minimum number of points in each of the x, y, z grids in the test
+   # the number of points in the ith test is ngrid*i
    nnbase = test_input["ngrid"]
+   # list of [name, symbolic string] pairs
    differential_operator_test_list = test_input["differential_operator_list"]
    astr = test_input["a_string"]
    fstr = test_input["f_string"]
