@@ -179,7 +179,7 @@ def run_manufactured_solutions_test(test_input):
                plt.gca().set_xscale("log")
          else:
                print("l2 error: ",yaxis)
-         plt.savefig(f"fig_{ifig}.png")
+         plt.savefig(f"{base_test_dir}/fig_{ifig}.png")
          if interactive_plots:
              plt.show()
          plt.close()
