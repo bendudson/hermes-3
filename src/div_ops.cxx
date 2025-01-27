@@ -1023,7 +1023,7 @@ Field3D Div_a_Grad_perp_nonorthog(const Field3D& a, const Field3D& f) {
     if (!coord->g23.hasParallelSlices() || !coord->g_23.hasParallelSlices()
         || !coord->dy.hasParallelSlices() || !coord->dz.hasParallelSlices()
         || !coord->Bxy.hasParallelSlices() || !coord->J.hasParallelSlices()) {
-      throw BoutException("metrics have no yup/down: Maybe communicate in init?");
+      throw BoutException("metrics have no yup/down");
     }
 
     g23up = coord->g23.yup();
