@@ -997,6 +997,10 @@ Field3D Div_a_Grad_perp_nonorthog(const Field3D& a, const Field3D& f) {
     aup = a.yup();
     adown = a.ydown();
 
+    if (f.isFci()) {
+        throw BoutException("This is not implemented for FCI.\n"
+        "The above calculation needs to be done for the parallel slices as well");
+    }
     mesh->communicate(fddx_xhigh);
     fddx_xhigh_up = fddx_xhigh.yup();
     fddx_xhigh_down = fddx_xhigh.ydown();
