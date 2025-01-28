@@ -93,10 +93,14 @@ Make a virtual python environment with
    source /path/to/your-python-env/bin/activate
 
 To install the required python libraries later.
-You should install ``xhermes`` https://github.com/boutproject/xhermes with
+You should install ``xbout`` https://github.com/boutproject/xBOUT 
+and ``xhermes`` https://github.com/boutproject/xhermes with
 
 .. code-block:: bash
   
+   git clone https://github.com/boutproject/xBOUT.git
+   cd xBOUT
+   python3 -m pip install -e .
    git clone https://github.com/boutproject/xhermes.git
    cd xhermes
    python3 -m pip install -e .
