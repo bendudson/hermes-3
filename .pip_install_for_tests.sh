@@ -19,15 +19,8 @@ do
     fi
 done
 
-# Install xBOUT to make sure we get master version
-git clone https://github.com/boutproject/xBOUT.git
-cd xBOUT
-pip3 install --user .
-cd ..
-
-# Install Hermes-3
-git clone https://github.com/boutproject/xhermes.git
-cd xhermes
-pip3 install --user .
-cd ..
+# Install xBOUT to make sure we get latest master version
+pip3 install  --user git+https://github.com/boutproject/xBOUT.git
+# Install xHermes for Hermes-3 python
+pip3 install  --user git+https://github.com/boutproject/xhermes.git
 
