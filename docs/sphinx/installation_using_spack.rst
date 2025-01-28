@@ -146,7 +146,7 @@ Now we are ready to install Hermes-3. First use
    git clone https://github.com/bendudson/hermes-3.git
    cd hermes-3
 
-Now run
+Now run the configuration command
 
 .. code-block:: bash
   
@@ -165,6 +165,8 @@ Test the install by
    cd build
    ctest
 
+To build in debug mode, use the flag ``-DCMAKE_BUILD_TYPE=Debug`` at the 
+configuration step above.
 Export a line like the following to your python path to make sure that 
 python functions are available for post processing
 
