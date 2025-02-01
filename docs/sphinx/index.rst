@@ -9,6 +9,7 @@ Welcome to Hermes-3 documentation!
 
    introduction
    getting_started
+   installation_using_spack
    examples
    tests
    transport_2d
@@ -16,3 +17,4 @@ Welcome to Hermes-3 documentation!
    code_structure
    components
    numerical_methods
+   detachment_controller
