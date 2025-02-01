@@ -1,6 +1,7 @@
 
 #include "../include/sheath_boundary_penalty.hxx"
 
+#include <bout/constants.hxx>
 #include <bout/globals.hxx>
 #include <bout/mesh.hxx>
 using bout::globals::mesh;
@@ -18,6 +19,11 @@ SheathBoundaryPenalty::SheathBoundaryPenalty(std::string name, Options& alloptio
   gamma_i =
       options["gamma_i"].doc("Ion sheath heat transmission coefficient").withDefault(3.5);
 
+  penalty_timescale = options["penalty_timescale"]
+                          .doc("Timescale of penalisation [seconds]")
+                          .withDefault(1e-6)
+                      / alloptions["units"]["seconds"].as<BoutReal>();
+
   std::string mask_name = options["mask_name"]
                               .doc("Name of the mesh variable containing penalty mask")
                               .withDefault<std::string>("penalty_mask");
@@ -25,6 +31,7 @@ SheathBoundaryPenalty::SheathBoundaryPenalty(std::string name, Options& alloptio
   if (mesh->get(penalty_mask, mask_name) != 0) {
     throw BoutException("Could not read penalty mask variable '{}'", mask_name);
   }
+  penalty_mask.applyBoundary("neumann");
 
   // Find every cell that has penalty_mask > 0
   // so we can efficiently iterate over them later
@@ -48,6 +55,12 @@ void SheathBoundaryPenalty::transform(Options& state) {
   auto Ne = getNoBoundary<Field3D>(electrons["density"]);
   auto Te = getNoBoundary<Field3D>(electrons["temperature"]);
   const BoutReal Me = get<BoutReal>(electrons["AA"]);
+
+  Field3D phi;
+  bool has_phi = IS_SET_NOBOUNDARY(state["fields"]["phi"]);
+  if (has_phi) {
+    phi = getNoBoundary<Field3D>(state["fields"]["phi"]);
+  }
 
   {
     Field3D Pe = electrons.isSet("pressure")
@@ -76,9 +89,47 @@ void SheathBoundaryPenalty::transform(Options& state) {
 
     BOUT_FOR(i, penalty_region) {
       BoutReal mask = penalty_mask[i]; // 1 in boundary
-      density_source[i] = (1 - mask) * density_source[i] - mask * Ne[i];
-      momentum_source[i] = (1 - mask) * momentum_source[i] - mask * NVe[i];
-      energy_source[i] = (1 - mask) * energy_source[i] - mask * gamma_e * Pe[i];
+
+      BoutReal nfloor = BOUTMAX(Ne[i], 1e-5);
+      density_source[i] = (1 - mask) * density_source[i]
+                          - mask * BOUTMAX(Ne[i] - 1e-5, 0.0) / penalty_timescale;
+      momentum_source[i] = (1 - mask) * momentum_source[i]
+                           - mask * Me * nfloor * Ve[i] / penalty_timescale;
+      energy_source[i] = (1 - mask) * energy_source[i]
+                         - mask * gamma_e * nfloor * Te[i] / penalty_timescale;
+
+      if (has_phi) {
+        // Surface penalty terms, to impose sheath current
+        // The gradient of the mask gives the direction into the wall
+        BoutReal dmask_yup = penalty_mask[i.yp()] - mask;
+        if (std::fabs(dmask_yup) > 1e-5) {
+          const auto iyp = i.yp();
+          const BoutReal tesheath = 0.5 * (Te[i] + Te[iyp]);
+          const BoutReal vesheath = 0.5 * (Ve[i] + Ve[iyp]);
+          const BoutReal phisheath = 0.5 * (phi[i] + phi[iyp]);
+
+          const BoutReal Cse =
+              sqrt(tesheath / (TWOPI * Me)) * exp(-phisheath / BOUTMAX(tesheath, 1e-5));
+
+          momentum_source[i] += mask * std::fabs(dmask_yup) * Me * nfloor
+                                * (SIGN(dmask_yup) * Cse - vesheath) / penalty_timescale;
+        }
+
+        BoutReal dmask_ydown = mask - penalty_mask[i.ym()];
+        if (std::fabs(dmask_ydown) > 1e-5) {
+          const auto iym = i.ym();
+          const BoutReal tesheath = 0.5 * (Te[i] + Te[iym]);
+          const BoutReal vesheath = 0.5 * (Ve[i] + Ve[iym]);
+          const BoutReal phisheath = 0.5 * (phi[i] + phi[iym]);
+
+          const BoutReal Cse =
+              sqrt(tesheath / (TWOPI * Me)) * exp(-phisheath / BOUTMAX(tesheath, 1e-5));
+
+          momentum_source[i] += mask * std::fabs(dmask_ydown) * Me * nfloor
+                                * (SIGN(dmask_ydown) * Cse - vesheath)
+                                / penalty_timescale;
+        }
+      }
     }
 
     set(electrons["density_source"], density_source);
@@ -93,24 +144,25 @@ void SheathBoundaryPenalty::transform(Options& state) {
     Options& species = allspecies[kv.first]; // Note: Need non-const
 
     // Characteristics of this species
-    const BoutReal Mi = get<BoutReal>(species["AA"]);
-    const BoutReal Zi = get<BoutReal>(species["charge"]);
+    const BoutReal Mi = GET_VALUE(BoutReal, species["AA"]);
+    const BoutReal Zi = GET_VALUE(BoutReal, species["charge"]);
 
     if (fabs(Zi) < 1e-5) {
       // Skip neutrals
       continue;
     }
 
-    Field3D Ni = floor(getNoBoundary<Field3D>(species["density"]), 0.0);
-    Field3D Ti = getNoBoundary<Field3D>(species["temperature"]);
+    // Boundary conditions should already have been applied
+    Field3D Ni = GET_VALUE(Field3D, species["density"]);
+    Field3D Ti = GET_VALUE(Field3D, species["temperature"]);
 
     Field3D Pi =
-        species.isSet("pressure") ? getNoBoundary<Field3D>(species["pressure"]) : Ni * Ti;
+        species.isSet("pressure") ? GET_VALUE(Field3D, species["pressure"]) : Ni * Ti;
 
-    Field3D Vi = species.isSet("velocity") ? getNoBoundary<Field3D>(species["velocity"])
+    Field3D Vi = species.isSet("velocity") ? GET_VALUE(Field3D, species["velocity"])
                                            : zeroFrom(Ni);
 
-    Field3D NVi = species.isSet("momentum") ? getNoBoundary<Field3D>(species["momentum"])
+    Field3D NVi = species.isSet("momentum") ? GET_VALUE(Field3D, species["momentum"])
                                             : Mi * Ni * Vi;
 
     // Get the particle source to modify
@@ -127,18 +179,58 @@ void SheathBoundaryPenalty::transform(Options& state) {
                                 : zeroFrom(Ni);
 
     BOUT_FOR(i, penalty_region) {
-      BoutReal mask = penalty_mask[i]; // 1 in boundary
-      density_source[i] = (1 - mask) * density_source[i] - mask * Ni[i];
-      momentum_source[i] = (1 - mask) * momentum_source[i] - mask * NVi[i];
+      BoutReal mask = penalty_mask[i]; // 1 in boundary, 0 in the plasma domain
 
-      //
-      BoutReal u = momentum_source[i] / (Mi * density_source[i]);
+      // Volumetric penalty terms
+      BoutReal nfloor = BOUTMAX(Ni[i], 1e-5);
+      density_source[i] = (1 - mask) * density_source[i]
+                          - mask * BOUTMAX(Ni[i] - 1e-5, 0.0) / penalty_timescale;
+      momentum_source[i] = (1 - mask) * momentum_source[i]
+                           - mask * Mi * nfloor * Vi[i] / penalty_timescale;
+      energy_source[i] = (1 - mask) * energy_source[i]
+                         - mask * gamma_i * nfloor * Ti[i] / penalty_timescale;
 
-      energy_source[i] = (1 - mask) * energy_source[i] - mask * gamma_i * Pi[i];
+      // Surface penalty terms.
+      // The gradient of the mask gives the direction
+      BoutReal dmask_yup = penalty_mask[i.yp()] - mask;
+      if (std::fabs(dmask_yup) > 1e-5) {
+        const auto iyp = i.yp();
+        const BoutReal tisheath = 0.5 * (Ti[i] + Ti[iyp]);
+        const BoutReal tesheath = 0.5 * (Te[i] + Te[iyp]);
+        const BoutReal visheath = 0.5 * (Vi[i] + Vi[iyp]);
+
+        const BoutReal Cs = sqrt((tesheath + tisheath) / Mi);
+
+        momentum_source[i] += mask * std::fabs(dmask_yup) * Mi * nfloor
+                              * (SIGN(dmask_yup) * Cs - visheath) / penalty_timescale;
+      }
+
+      BoutReal dmask_ydown = mask - penalty_mask[i.ym()];
+      if (std::fabs(dmask_ydown) > 1e-5) {
+        const auto iym = i.ym();
+        const BoutReal tisheath = 0.5 * (Ti[i] + Ti[iym]);
+        const BoutReal tesheath = 0.5 * (Te[i] + Te[iym]);
+        const BoutReal visheath = 0.5 * (Vi[i] + Vi[iym]);
+
+        const BoutReal Cs = sqrt((tesheath + tisheath) / Mi);
+
+        momentum_source[i] += mask * std::fabs(dmask_ydown) * Mi * nfloor
+                              * (SIGN(dmask_ydown) * Cs - visheath) / penalty_timescale;
+      }
     }
 
     set(species["density_source"], density_source);
     set(species["momentum_source"], momentum_source);
     set(species["energy_source"], energy_source);
   }
+}
+
+void SheathBoundaryPenalty::outputVars(Options& state) {
+  AUTO_TRACE();
+
+  set_with_attrs(state["penalty_mask"], penalty_mask,
+                 {{"units", ""},
+                  {"long_name", "Penalty mask"},
+                  {"standard_name", "Penalty mask"},
+                  {"source", "sheath_boundary_penalty"}});
 }
