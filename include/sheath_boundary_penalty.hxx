@@ -42,6 +42,10 @@ private:
 
   /// Timescale of penalisation [normalised]
   BoutReal penalty_timescale;
+
+  /// Diagnostics for output
+  Options diagnostics;
+  bool diagnose; ///< Save diagnostics?
 };
 
 namespace {

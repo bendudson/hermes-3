@@ -12,6 +12,10 @@ SheathBoundaryPenalty::SheathBoundaryPenalty(std::string name, Options& alloptio
 
   Options& options = alloptions[name];
 
+  diagnose = options["diagnose"]
+                .doc("Save penalty term diagnostics?")
+                .withDefault<bool>(false);
+
   gamma_e = options["gamma_e"]
                 .doc("Electron sheath heat transmission coefficient")
                 .withDefault(3.5);
@@ -178,17 +182,24 @@ void SheathBoundaryPenalty::transform(Options& state) {
                                 ? getNonFinal<Field3D>(species["energy_source"])
                                 : zeroFrom(Ni);
 
+    // Save the sources as diagnostics and for recycling
+    Field3D density_penalty {zeroFrom(Ni)};
+    Field3D momentum_penalty {zeroFrom(Ni)};
+    Field3D energy_penalty {zeroFrom(Ni)};
+
     BOUT_FOR(i, penalty_region) {
       BoutReal mask = penalty_mask[i]; // 1 in boundary, 0 in the plasma domain
 
       // Volumetric penalty terms
       BoutReal nfloor = BOUTMAX(Ni[i], 1e-5);
-      density_source[i] = (1 - mask) * density_source[i]
-                          - mask * BOUTMAX(Ni[i] - 1e-5, 0.0) / penalty_timescale;
-      momentum_source[i] = (1 - mask) * momentum_source[i]
-                           - mask * Mi * nfloor * Vi[i] / penalty_timescale;
-      energy_source[i] = (1 - mask) * energy_source[i]
-                         - mask * gamma_i * nfloor * Ti[i] / penalty_timescale;
+      density_penalty[i] = - mask * density_source[i]
+                           - mask * BOUTMAX(Ni[i] - 1e-5, 0.0) / penalty_timescale;
+
+      momentum_penalty[i] = - mask * momentum_source[i]
+                            - mask * Mi * nfloor * Vi[i] / penalty_timescale;
+
+      energy_penalty[i] = - mask * energy_source[i]
+                          - mask * gamma_i * nfloor * Ti[i] / penalty_timescale;
 
       // Surface penalty terms.
       // The gradient of the mask gives the direction
@@ -201,7 +212,7 @@ void SheathBoundaryPenalty::transform(Options& state) {
 
         const BoutReal Cs = sqrt((tesheath + tisheath) / Mi);
 
-        momentum_source[i] += mask * std::fabs(dmask_yup) * Mi * nfloor
+        momentum_penalty[i] += mask * std::fabs(dmask_yup) * Mi * nfloor
                               * (SIGN(dmask_yup) * Cs - visheath) / penalty_timescale;
       }
 
@@ -214,14 +225,22 @@ void SheathBoundaryPenalty::transform(Options& state) {
 
         const BoutReal Cs = sqrt((tesheath + tisheath) / Mi);
 
-        momentum_source[i] += mask * std::fabs(dmask_ydown) * Mi * nfloor
+        momentum_penalty[i] += mask * std::fabs(dmask_ydown) * Mi * nfloor
                               * (SIGN(dmask_ydown) * Cs - visheath) / penalty_timescale;
       }
     }
 
-    set(species["density_source"], density_source);
-    set(species["momentum_source"], momentum_source);
-    set(species["energy_source"], energy_source);
+    add(species["density_source"], density_penalty);
+    add(species["momentum_source"], momentum_penalty);
+    add(species["energy_source"], energy_penalty);
+
+    if (diagnose) {
+      // Store penalty term diagnostics to used in outputVars
+      auto& diagnostic_species = diagnostics[kv.first];
+      set(diagnostic_species["density_penalty"], density_penalty);
+      set(diagnostic_species["momentum_penalty"], momentum_penalty);
+      set(diagnostic_species["energy_penalty"], energy_penalty);
+    }
   }
 }
 
@@ -233,4 +252,46 @@ void SheathBoundaryPenalty::outputVars(Options& state) {
                   {"long_name", "Penalty mask"},
                   {"standard_name", "Penalty mask"},
                   {"source", "sheath_boundary_penalty"}});
+
+  if (diagnose) {
+    // Normalisations
+    auto Nnorm = get<BoutReal>(state["Nnorm"]);
+    auto Tnorm = get<BoutReal>(state["Tnorm"]);
+    BoutReal Pnorm = SI::qe * Tnorm * Nnorm; // Pressure normalisation
+    auto Omega_ci = get<BoutReal>(state["Omega_ci"]);
+    auto Cs0 = get<BoutReal>(state["Cs0"]);
+
+    for (const auto& kv : diagnostics.getChildren()) {
+      // Save diagnostics for this species
+      set_with_attrs(state[std::string("S") + kv.first + std::string("_penalty")],
+                     getNonFinal<Field3D>(kv.second["density_penalty"]),
+                     {{"time_dimension", "t"},
+                      {"units", "m^-3 s^-1"},
+                      {"conversion", Nnorm * Omega_ci},
+                      {"standard_name", "particle source"},
+                      {"long_name", kv.first + " particle source penalty term"},
+                      {"species", kv.first},
+                      {"source", "sheath_boundary_penalty"}});
+
+      set_with_attrs(state[std::string("F") + kv.first + std::string("_penalty")],
+                     getNonFinal<Field3D>(kv.second["momentum_penalty"]),
+                     {{"time_dimension", "t"},
+                      {"units", "kg m^-2 s^-2"},
+                      {"conversion", SI::Mp * Nnorm * Cs0 * Omega_ci},
+                      {"standard_name", "momentum source"},
+                      {"long_name", kv.first + " momentum source penalty term"},
+                      {"species", kv.first},
+                      {"source", "sheath_boundary_penalty"}});
+
+      set_with_attrs(state[std::string("R") + kv.first + std::string("_penalty")],
+                     getNonFinal<Field3D>(kv.second["energy_penalty"]),
+                     {{"time_dimension", "t"},
+                      {"units", "W m^-3"},
+                      {"conversion", Pnorm * Omega_ci},
+                      {"standard_name", "energy source"},
+                      {"long_name", kv.first + " energy source penalty term"},
+                      {"species", kv.first},
+                      {"source", "sheath_boundary_penalty"}});
+    }
+  }
 }
