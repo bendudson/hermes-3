@@ -234,6 +234,10 @@ void SheathBoundaryPenalty::transform(Options& state) {
     add(species["momentum_source"], momentum_penalty);
     add(species["energy_source"], energy_penalty);
 
+    set(species["density_penalty"], density_penalty);
+    set(species["momentum_penalty"], momentum_penalty);
+    set(species["energy_penalty"], energy_penalty);
+
     if (diagnose) {
       // Store penalty term diagnostics to used in outputVars
       auto& diagnostic_species = diagnostics[kv.first];
