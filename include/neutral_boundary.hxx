@@ -54,6 +54,7 @@ private:
   BoutReal target_fast_refl_fraction, sol_fast_refl_fraction, pfr_fast_refl_fraction; ///< Fraction of neutrals undergoing fast reflection
 
   Field3D target_energy_source, wall_energy_source; ///< Diagnostic for power loss
+  Field3D density_source, energy_source, momentum_source;
 
   bool diagnose; ///> Save diagnostic variables?
 

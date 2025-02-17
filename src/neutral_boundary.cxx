@@ -68,12 +68,25 @@ void NeutralBoundary::transform(Options& state) {
                     : zeroFrom(Nn);
 
   // Get the energy source, or create if not set
-  Field3D energy_source =
+  energy_source =
       species.isSet("energy_source")
           ? toFieldAligned(getNonFinal<Field3D>(species["energy_source"]))
           : zeroFrom(Nn);
 
+  density_source =
+      species.isSet("density_source")
+          ? toFieldAligned(getNonFinal<Field3D>(species["density_source"]))
+          : zeroFrom(Nn);
+
+  momentum_source =
+      species.isSet("momentum_source")
+          ? toFieldAligned(getNonFinal<Field3D>(species["momentum_source"]))
+          : zeroFrom(Nn);
+  
+
   Coordinates* coord = mesh->getCoordinates();
+
+  // These are for diagnostic purposes
   target_energy_source = 0;
   wall_energy_source = 0;
 
@@ -160,13 +173,19 @@ void NeutralBoundary::transform(Options& state) {
         Tn[ip] = Tn[i];
 
         // No-flow boundary condition
-        Vn[ip] = -Vn[i];
-        NVn[ip] = -NVn[i];
+        // Vn[ip] = -Vn[i];
+        // NVn[ip] = -NVn[i];
+ 
+        Vn[ip] = Vn[i];
+        NVn[ip] = NVn[i];
 
         // Calculate midpoint values at wall
         const BoutReal nnsheath = 0.5 * (Nn[ip] + Nn[i]);
         const BoutReal tnsheath = 0.5 * (Tn[ip] + Tn[i]);
+        const BoutReal vnsheath = 0.5 * (Vn[ip] + Vn[i]);
+        const BoutReal nvnsheath = 0.5 * (NVn[ip] + NVn[i]);
 
+        //// Energy
         // Thermal speed
         const BoutReal v_th = 0.25 * sqrt( 8*tnsheath / (PI*AA) );   // Stangeby p.69 eqns. 2.21, 2.24
 
@@ -184,15 +203,35 @@ void NeutralBoundary::transform(Options& state) {
         BoutReal da = (coord->J[i] + coord->J[ip]) / (sqrt(coord->g_22[i]) + sqrt(coord->g_22[ip]))
                       * 0.5*(coord->dx[i] + coord->dx[ip]) * 0.5*(coord->dz[i] + coord->dz[ip]);   // [m^2]
 
-        // Multiply by area to get energy flow (power)
+        // Cell volume
+        BoutReal dv = coord->dx[i] * coord->dy[i] * coord->dz[i] * coord->J[i];  // [m^3]
+
+        // Multiply heat flux by area to get energy flow (power)
         BoutReal flow = q * da;  // [W]
 
         // Divide by cell volume to get source [W/m^3]
-        BoutReal cooling_source = flow / (coord->dx[i] * coord->dy[i] * coord->dz[i] * coord->J[i]);
+        BoutReal cooling_source = flow / dv;
 
         // Subtract from cell next to boundary
-        energy_source[i] -= cooling_source;
-        target_energy_source[i] -= cooling_source;
+        energy_source[i] -= cooling_source / dv;
+        target_energy_source[i] -= cooling_source / dv;
+
+        //// Particles
+        // Outgoing particle flow
+        BoutReal particle_flow = nnsheath * vnsheath * da; // [s^-1]
+        
+        // All neutrals return
+        density_source[i] -= particle_flow / dv;
+
+        //// Momentum
+        // Again taken from D. Power thesis
+        // Thermal reflection reflects momentum corresponding to FC energy
+        // Fast reflection reflects all momentum
+        BoutReal v_th_FC = sqrt(2 * T_FC / AA);
+        BoutReal momentum_flow_thermal = -2/3 * v_th * nnsheath * (1-target_fast_refl_fraction);
+        BoutReal momentum_flow_fast = -vnsheath * nnsheath * target_fast_refl_fraction;
+        
+        momentum_source[i] = momentum_flow_thermal + momentum_flow_fast;
 
       }
     }
@@ -318,6 +357,8 @@ void NeutralBoundary::transform(Options& state) {
   // Set energy source (negative in cell next to sheath)
   // Note: energy_source includes any sources previously set in other components
   set(species["energy_source"], fromFieldAligned(energy_source));
+  set(species["density_source"], fromFieldAligned(density_source));
+  set(species["momentum_source"], fromFieldAligned(momentum_source));
 }
 
 void NeutralBoundary::outputVars(Options& state) {
@@ -328,6 +369,7 @@ void NeutralBoundary::outputVars(Options& state) {
   auto Omega_ci = get<BoutReal>(state["Omega_ci"]);
   auto Tnorm = get<BoutReal>(state["Tnorm"]);
   BoutReal Pnorm = SI::qe * Tnorm * Nnorm; // Pressure normalisation
+  auto Cs0 = get<BoutReal>(state["Cs0"]);
 
   if (diagnose) {
 
@@ -353,6 +395,14 @@ void NeutralBoundary::outputVars(Options& state) {
                       {"conversion", Pnorm * Omega_ci},
                       {"standard_name", "energy source"},
                       {"long_name", std::string("Wall reflection energy source of ") + name},
+                      {"source", "neutral_boundary"}});
+
+      set_with_attrs(state[{std::string("F") + name + std::string("_target_refl")}], momentum_source,
+                      {{"time_dimension", "t"},
+                      {"units", "kg m^-2 s^-2"},
+                      {"conversion", SI::Mp * Nnorm * Cs0 * Omega_ci},
+                      {"standard_name", "momentum transfer"},
+                      {"long_name", std::string("Wall reflection momentum source of ") + name},
                       {"source", "neutral_boundary"}});
   }
 }
