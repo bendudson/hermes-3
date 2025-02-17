@@ -48,7 +48,7 @@ ixseps2 = -1
 # the components that they depend on.
 # If this is wrong, you'll get a runtime error (about non-existant variables)
 components = (d+, d, e,
-              sheath_boundary, collisions, recycling, reactions,
+              sheath_boundary_simple, collisions, recycling, reactions,
               electron_force_balance, neutral_parallel_diffusion)
 
 loadmetric = false       # Use Rxy, Bpxy etc?
@@ -68,13 +68,13 @@ lag_jacobian = 500
 atol = 1e-7
 rtol = 1e-5
 
-[sheath_boundary]
-# Set a sheath boundary condition at which the ends of the field-line
+[sheath_boundary_simple]
 lower_y = false
 upper_y = true
+gamma_i = 2.5
+gamma_e = 4.5
 
 [neutral_parallel_diffusion]
-
 dneut = 10   # (B / Bpol)^2 in neutral diffusion terms
 
 ####################################
@@ -137,6 +137,7 @@ type = (evolve_density, evolve_pressure, evolve_momentum,
 charge = 0
 # Neutral mass in amu
 AA = 2
+density_floor = 1e-7
 
 thermal_conduction = true
 # Save variable to file
@@ -180,6 +181,7 @@ source = `Pd+:source`  # Same as ion pressure source
 species = d+
 
 [reactions]
+diagnose = true
 type = (
         d + e -> d+ + 2e,     # Deuterium ionisation
         d+ + e -> d,          # Deuterium recombination
