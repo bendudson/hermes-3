@@ -63,7 +63,8 @@ const Field2D Laplace_FV(const Field2D& k, const Field2D& f);
 /// Perpendicular diffusion including X and Y directions
 /// Takes Div_a_Grad_perp from BOUT++ and adds flows
 const Field3D Div_a_Grad_perp_flows(const Field3D& a, const Field3D& f,
-                                           Field3D& flux_xlow, Field3D& flux_ylow);
+                                           Field3D& flux_xlow, Field3D& flux_ylow,
+                                           bool& radial_diffusion_only);
 /// Same but with upwinding
 /// WARNING: Causes checkerboarding in neutral_mixed integrated test
 const Field3D Div_a_Grad_perp_upwind(const Field3D& a, const Field3D& f);

@@ -794,7 +794,8 @@ const Field2D Laplace_FV(const Field2D &k, const Field2D &f) {
 
 const Field3D Div_a_Grad_perp_flows(const Field3D& a, const Field3D& f,
                               Field3D &flow_xlow, 
-                              Field3D &flow_ylow) {
+                              Field3D &flow_ylow,
+                              bool &radial_diffusion_only) {
   ASSERT2(a.getLocation() == f.getLocation());
 
   Mesh* mesh = a.getMesh();
@@ -929,85 +930,87 @@ const Field3D Div_a_Grad_perp_flows(const Field3D& a, const Field3D& f,
   }
 
   // Y flux
+  if (!radial_diffusion_only) {
+    for (int i = mesh->xstart; i <= mesh->xend; i++) {
+      for (int j = mesh->ystart; j <= mesh->yend; j++) {
+        for (int k = 0; k < mesh->LocalNz; k++) {
+          // Calculate flux between j and j+1
+          int kp = (k + 1) % mesh->LocalNz;
+          int km = (k - 1 + mesh->LocalNz) % mesh->LocalNz;
 
-  for (int i = mesh->xstart; i <= mesh->xend; i++) {
-    for (int j = mesh->ystart; j <= mesh->yend; j++) {
-      for (int k = 0; k < mesh->LocalNz; k++) {
-        // Calculate flux between j and j+1
-        int kp = (k + 1) % mesh->LocalNz;
-        int km = (k - 1 + mesh->LocalNz) % mesh->LocalNz;
+          BoutReal coef =
+              0.5
+              * (g_23c(i, j, k) / SQ(Jc(i, j, k) * Bxyc(i, j, k))
+                + g_23up(i, j + 1, k) / SQ(Jup(i, j + 1, k) * Bxyup(i, j + 1, k)));
 
-        BoutReal coef =
-            0.5
-            * (g_23c(i, j, k) / SQ(Jc(i, j, k) * Bxyc(i, j, k))
-               + g_23up(i, j + 1, k) / SQ(Jup(i, j + 1, k) * Bxyup(i, j + 1, k)));
+          // Calculate Z derivative at y boundary
+          BoutReal dfdz =
+              0.5 * (fc(i, j, kp) - fc(i, j, km) + fup(i, j + 1, kp) - fup(i, j + 1, km))
+              / (dzc(i, j, k) + dzup(i, j + 1, k));
 
-        // Calculate Z derivative at y boundary
-        BoutReal dfdz =
-            0.5 * (fc(i, j, kp) - fc(i, j, km) + fup(i, j + 1, kp) - fup(i, j + 1, km))
-            / (dzc(i, j, k) + dzup(i, j + 1, k));
+          // Y derivative
+          BoutReal dfdy =
+              2. * (fup(i, j + 1, k) - fc(i, j, k)) / (dyup(i, j + 1, k) + dyc(i, j, k));
 
-        // Y derivative
-        BoutReal dfdy =
-            2. * (fup(i, j + 1, k) - fc(i, j, k)) / (dyup(i, j + 1, k) + dyc(i, j, k));
+          BoutReal fout =
+              0.25 * (ac(i, j, k) + aup(i, j + 1, k))
+              * (Jc(i, j, k) * g23c(i, j, k) + Jup(i, j + 1, k) * g23up(i, j + 1, k))
+              * (dfdz - coef * dfdy);
 
-        BoutReal fout =
-            0.25 * (ac(i, j, k) + aup(i, j + 1, k))
-            * (Jc(i, j, k) * g23c(i, j, k) + Jup(i, j + 1, k) * g23up(i, j + 1, k))
-            * (dfdz - coef * dfdy);
+          yzresult(i, j, k) = fout / (dyc(i, j, k) * Jc(i, j, k));
 
-        yzresult(i, j, k) = fout / (dyc(i, j, k) * Jc(i, j, k));
+          // Calculate flux between j and j-1
+          coef =
+              0.5
+              * (g_23c(i, j, k) / SQ(Jc(i, j, k) * Bxyc(i, j, k))
+                + g_23down(i, j - 1, k) / SQ(Jdown(i, j - 1, k) * Bxydown(i, j - 1, k)));
 
-        // Calculate flux between j and j-1
-        coef =
-            0.5
-            * (g_23c(i, j, k) / SQ(Jc(i, j, k) * Bxyc(i, j, k))
-               + g_23down(i, j - 1, k) / SQ(Jdown(i, j - 1, k) * Bxydown(i, j - 1, k)));
+          dfdz = 0.5
+                * (fc(i, j, kp) - fc(i, j, km) + fdown(i, j - 1, kp) - fdown(i, j - 1, km))
+                / (dzc(i, j, k) + dzdown(i, j - 1, k));
 
-        dfdz = 0.5
-               * (fc(i, j, kp) - fc(i, j, km) + fdown(i, j - 1, kp) - fdown(i, j - 1, km))
-               / (dzc(i, j, k) + dzdown(i, j - 1, k));
+          dfdy = 2. * (fc(i, j, k) - fdown(i, j - 1, k))
+                / (dyc(i, j, k) + dydown(i, j - 1, k));
 
-        dfdy = 2. * (fc(i, j, k) - fdown(i, j - 1, k))
-               / (dyc(i, j, k) + dydown(i, j - 1, k));
+          fout = 0.25 * (ac(i, j, k) + adown(i, j - 1, k))
+                * (Jc(i, j, k) * g23c(i, j, k) + Jdown(i, j - 1, k) * g23down(i, j - 1, k))
+                * (dfdz - coef * dfdy);
 
-        fout = 0.25 * (ac(i, j, k) + adown(i, j - 1, k))
-               * (Jc(i, j, k) * g23c(i, j, k) + Jdown(i, j - 1, k) * g23down(i, j - 1, k))
-               * (dfdz - coef * dfdy);
+          yzresult(i, j, k) -= fout / (dyc(i, j, k) * Jc(i, j, k));
 
-        yzresult(i, j, k) -= fout / (dyc(i, j, k) * Jc(i, j, k));
-
-        // Flow will be positive in the positive coordinate direction
-        flow_ylow(i, j, k) = -1.0 * fout * coord->dx(i, j) * coord->dz(i, j);
+          // Flow will be positive in the positive coordinate direction
+          flow_ylow(i, j, k) = -1.0 * fout * coord->dx(i, j) * coord->dz(i, j);
+        }
       }
     }
   }
 
   // Z flux
+  if (!radial_diffusion_only) {
+    for (int i = mesh->xstart; i <= mesh->xend; i++) {
+      for (int j = mesh->ystart; j <= mesh->yend; j++) {
+        for (int k = 0; k < mesh->LocalNz; k++) {
+          // Calculate flux between k and k+1
+          int kp = (k + 1) % mesh->LocalNz;
 
-  for (int i = mesh->xstart; i <= mesh->xend; i++) {
-    for (int j = mesh->ystart; j <= mesh->yend; j++) {
-      for (int k = 0; k < mesh->LocalNz; k++) {
-        // Calculate flux between k and k+1
-        int kp = (k + 1) % mesh->LocalNz;
+          // Coefficient in front of df/dy term
+          BoutReal coef = g_23c(i, j, k)
+                          / (dyup(i, j + 1, k) + 2. * dyc(i, j, k) + dydown(i, j - 1, k))
+                          / SQ(Jc(i, j, k) * Bxyc(i, j, k));
 
-        // Coefficient in front of df/dy term
-        BoutReal coef = g_23c(i, j, k)
-                        / (dyup(i, j + 1, k) + 2. * dyc(i, j, k) + dydown(i, j - 1, k))
-                        / SQ(Jc(i, j, k) * Bxyc(i, j, k));
+          BoutReal fout =
+              0.25 * (ac(i, j, k) + ac(i, j, kp))
+              * (Jc(i, j, k) * coord->g33(i, j, k) + Jc(i, j, kp) * coord->g33(i, j, kp))
+              * ( // df/dz
+                  (fc(i, j, kp) - fc(i, j, k)) / dzc(i, j, k)
+                  // - g_yz * df/dy / SQ(J*B)
+                  - coef
+                        * (fup(i, j + 1, k) + fup(i, j + 1, kp) - fdown(i, j - 1, k)
+                          - fdown(i, j - 1, kp)));
 
-        BoutReal fout =
-            0.25 * (ac(i, j, k) + ac(i, j, kp))
-            * (Jc(i, j, k) * coord->g33(i, j, k) + Jc(i, j, kp) * coord->g33(i, j, kp))
-            * ( // df/dz
-                (fc(i, j, kp) - fc(i, j, k)) / dzc(i, j, k)
-                // - g_yz * df/dy / SQ(J*B)
-                - coef
-                      * (fup(i, j + 1, k) + fup(i, j + 1, kp) - fdown(i, j - 1, k)
-                         - fdown(i, j - 1, kp)));
-
-        yzresult(i, j, k) += fout / (Jc(i, j, k) * dzc(i, j, k));
-        yzresult(i, j, kp) -= fout / (Jc(i, j, kp) * dzc(i, j, kp));
+          yzresult(i, j, k) += fout / (Jc(i, j, k) * dzc(i, j, k));
+          yzresult(i, j, kp) -= fout / (Jc(i, j, kp) * dzc(i, j, kp));
+        }
       }
     }
   }

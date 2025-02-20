@@ -58,6 +58,7 @@ private:
 
   bool precondition {true}; ///< Enable preconditioner?
   bool lax_flux; ///< Use Lax flux for advection terms
+  bool radial_diffusion_only; /// Only include radial component of cross-field diffusion?
   std::unique_ptr<Laplacian> inv; ///< Laplacian inversion used for preconditioning
 
   Field3D density_source, pressure_source; ///< External input source

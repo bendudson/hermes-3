@@ -88,6 +88,13 @@ NeutralMixed::NeutralMixed(const std::string& name, Options& alloptions, Solver*
                           .doc("Include neutral gas heat conduction?")
                           .withDefault<bool>(true);
 
+  // Only the radial component of cross-field transport is preconditioned at the moment.
+  // Dropping the poloidal/toroidal components may improve performance.
+  // Note that we already solve neutral parallel transport with a full momentum equation.
+  radial_diffusion_only = options["radial_diffusion_only"]
+                              .doc("Only include radial component of cross-field diffusion?")
+                              .withDefault<bool>(false);
+
   if (precondition) {
     inv = std::unique_ptr<Laplacian>(Laplacian::create(&options["precon_laplace"]));
 
@@ -357,7 +364,8 @@ void NeutralMixed::finally(const Options& state) {
                   
     + Div_a_Grad_perp_flows(DnnNn, logPnlim,
                                    pf_adv_perp_xlow,
-                                   pf_adv_perp_ylow);    // Perpendicular advection
+                                   pf_adv_perp_ylow,
+                                   radial_diffusion_only);    // Perpendicular advection
     ;
 
   Sn = density_source; // Save for possible output
@@ -377,7 +385,8 @@ void NeutralMixed::finally(const Options& state) {
 
             + Div_a_Grad_perp_flows(                     // Perpendicular advection
                     DnnPn, logPnlim,
-                    ef_adv_perp_xlow, ef_adv_perp_ylow)  
+                    ef_adv_perp_xlow, ef_adv_perp_ylow,
+                    radial_diffusion_only)  
      ;
 
   // The factor here is 5/2 as we're advecting internal energy and pressure.
@@ -388,7 +397,8 @@ void NeutralMixed::finally(const Options& state) {
   if (neutral_conduction) {
     ddt(Pn) += Div_a_Grad_perp_flows(
                     DnnNn, Tn,                            // Perpendicular conduction
-                    ef_cond_perp_xlow, ef_cond_perp_ylow)
+                    ef_cond_perp_xlow, ef_cond_perp_ylow,
+                    radial_diffusion_only)
 
             + Div_par_K_Grad_par_mod(DnnNn, Tn,           // Parallel conduction 
                       ef_cond_par_ylow,        
@@ -421,7 +431,8 @@ void NeutralMixed::finally(const Options& state) {
         
         + Div_a_Grad_perp_flows(DnnNVn, logPnlim,
                                      mf_adv_perp_xlow,
-                                     mf_adv_perp_ylow) // Perpendicular advection
+                                     mf_adv_perp_ylow,
+                                     radial_diffusion_only) // Perpendicular advection
       ;
 
     if (neutral_viscosity) {
@@ -439,7 +450,8 @@ void NeutralMixed::finally(const Options& state) {
           AA * Div_a_Grad_perp_flows(
                     (2. / 5) * DnnNn, Vn,              // Perpendicular viscosity
                     mf_visc_perp_xlow,
-                    mf_visc_perp_ylow)    
+                    mf_visc_perp_ylow,
+                    radial_diffusion_only)    
 
           + AA * Div_par_K_Grad_par_mod(               // Parallel viscosity 
                     (2. / 5) * DnnNn, Vn,
