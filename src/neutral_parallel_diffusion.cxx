@@ -46,7 +46,7 @@ void NeutralParallelDiffusion::transform(Options& state) {
     // This is the pressure-diffusion approximation 
     Field3D logPn = log(floor(Pn, 1e-7));
 
-    if (toroidal_slip) {
+    if (toroidal_slip and IS_SET_NOBOUNDARY(species["velocity"])) {
       // Allow non-zero toroidal flow. Parallel flow into the target
       // is balanced by perpendicular flow away from the target.
 
@@ -63,19 +63,17 @@ void NeutralParallelDiffusion::transform(Options& state) {
         // Neumann boundary on Dn
         Dn[i_bndry] = Dn[i];
 
-        // Constant gradient of logPn
-        // This sets a Neumann condition on the perpendicular velocity
-        logPn[i_bndry] = 2 * logPn[i] - logPn[ip];
+        // Neumann boundary on parallel flows
+        // Note: This allows parallel flows into the target, that
+        //       must be cancelled by a perpendicular flow out of the target
+        Vn[i_bndry] = Vn[i];
+        NVn[i_bndry] = NVn[i];
+        BoutReal vpar = 0.5 * (Vn[i_bndry] + Vn[i]); // Parallel flow at boundary
 
-        // Parallel flow to balance perpendicular diffusion
-        BoutReal vpar = Dn[i] * (logPn[i] - logPn[i_bndry]) / (dy[i] * sqrt(g_22[i]));
-
-        // Density at the boundary
-        BoutReal nbndry = 0.5 * (Nn[i_bndry] + Nn[i]);
-
-        // Set parallel flow
-        Vn[i_bndry] = 2 * vpar - Vn[i];
-        NVn[i_bndry] = 2 * vpar * nbndry - NVn[i];
+        // Calculate logPn boundary to set perpendicular flow
+        // at the target. This is a rearrangement of
+        //     vpar = -Dn[i] * (logPn[i] - logPn[i_bndry]) / (dy[i] * sqrt(g_22[i]));
+        logPn[i_bndry] = logPn[i] + sign * vpar * dy[i] * sqrt(g_22[i]) / Dn[i];
 
       });
 
