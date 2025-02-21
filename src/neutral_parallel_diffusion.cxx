@@ -1,4 +1,5 @@
 #include "../include/neutral_parallel_diffusion.hxx"
+#include "../include/hermes_utils.hxx"
 
 #include <bout/constants.hxx>
 #include <bout/fv_ops.hxx>
@@ -39,13 +40,56 @@ void NeutralParallelDiffusion::transform(Options& state) {
 
     // Pressure-diffusion coefficient
     Field3D Dn = dneut * Tn / (AA * nu);
-    Dn.applyBoundary("dirichlet_o2");
     mesh->communicate(Dn);
 
     // Cross-field diffusion calculated from pressure gradient
     // This is the pressure-diffusion approximation 
     Field3D logPn = log(floor(Pn, 1e-7));
-    logPn.applyBoundary("neumann");
+
+    if (toroidal_slip) {
+      // Allow non-zero toroidal flow. Parallel flow into the target
+      // is balanced by perpendicular flow away from the target.
+
+      const auto g_22 = mesh->getCoordinates()->g_22;
+      const auto dy = mesh->getCoordinates()->dy;
+
+      Field3D Vn = GET_NOBOUNDARY(Field3D, species["velocity"]);
+      Field3D NVn = GET_NOBOUNDARY(Field3D, species["momentum"]);
+
+      iterateBoundaries([&](const Ind3D& i_bndry,
+                            const Ind3D& i,
+                            const Ind3D& ip,
+                            int sign) {
+        // Neumann boundary on Dn
+        Dn[i_bndry] = Dn[i];
+
+        // Constant gradient of logPn
+        // This sets a Neumann condition on the perpendicular velocity
+        logPn[i_bndry] = 2 * logPn[i] - logPn[ip];
+
+        // Parallel flow to balance perpendicular diffusion
+        BoutReal vpar = Dn[i] * (logPn[i] - logPn[i_bndry]) / (dy[i] * sqrt(g_22[i]));
+
+        // Density at the boundary
+        BoutReal nbndry = 0.5 * (Nn[i_bndry] + Nn[i]);
+
+        // Set parallel flow
+        Vn[i_bndry] = 2 * vpar - Vn[i];
+        NVn[i_bndry] = 2 * vpar * nbndry - NVn[i];
+
+      });
+
+      // Set parallel boundary for the momentum equation
+      setBoundary(species["velocity"], Vn);
+      setBoundary(species["momentum"], NVn);
+
+    } else {
+      // Set perpendicular flow to zero.
+      // The parallel flow is already set to zero by default, so this
+      // sets all components of the velocity to zero at the target.
+      Dn.applyBoundary("dirichlet_o2");
+      logPn.applyBoundary("neumann");
+    }
 
     // Particle advection
     Field3D S = FV::Div_par_K_Grad_par(Dn * Nn, logPn);
