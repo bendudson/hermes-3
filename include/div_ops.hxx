@@ -69,6 +69,15 @@ const Field3D Div_a_Grad_perp_upwind_flows(const Field3D& a, const Field3D& f, F
 const Field3D Div_par_K_Grad_par_mod(const Field3D& k, const Field3D& f, Field3D& flow_ylow,
                                      bool bndry_flux = true);
 
+/*!
+ * Div ( a Grad_perp(f) ) -- ∇⊥ ( a ⋅ ∇⊥ f) -- Vorticity
+ *
+ * This version includes corrections for non-orthogonal meshes
+ * in which the g12 and g13 components can be non-zero
+ * i.e. X-Y, X-Z and Y-Z coordinates can all be non-orthogonal.
+ */
+Field3D Div_a_Grad_perp_nonorthog(const Field3D& a, const Field3D& x);
+
 namespace FV {
 
 /// Superbee limiter
