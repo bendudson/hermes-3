@@ -1,6 +1,7 @@
 #include "classical_diffusion.hxx"
 
 #include <bout/fv_ops.hxx>
+#include "../include/div_ops.hxx"
 
 ClassicalDiffusion::ClassicalDiffusion(std::string name, Options& alloptions, Solver*) {
   AUTO_TRACE();
@@ -65,18 +66,21 @@ void ClassicalDiffusion::transform(Options &state) {
 
     const auto N = GET_VALUE(Field3D, species["density"]);
 
-    add(species["density_source"], FV::Div_a_Grad_perp(Dn, N));
+    // add(species["density_source"], FV::Div_a_Grad_perp(Dn, N));
+    add(species["density_source"], Div_a_Grad_perp_nonorthog(Dn, N));
 
     if (IS_SET(species["velocity"])) {
       const auto V = GET_VALUE(Field3D, species["velocity"]);
       const auto AA = GET_VALUE(BoutReal, species["AA"]);
 
-      add(species["momentum_source"], FV::Div_a_Grad_perp(Dn * AA * V, N));
+      // add(species["momentum_source"], FV::Div_a_Grad_perp(Dn * AA * V, N));
+      add(species["momentum_source"], Div_a_Grad_perp_nonorthog(Dn * AA * V, N));
     }
 
     if (IS_SET(species["temperature"])) {
       const auto T = GET_VALUE(Field3D, species["temperature"]);
-      add(species["energy_source"], FV::Div_a_Grad_perp(Dn * (3. / 2) * T, N));
+      // add(species["energy_source"], FV::Div_a_Grad_perp(Dn * (3. / 2) * T, N));
+      add(species["energy_source"], Div_a_Grad_perp_nonorthog(Dn * (3. / 2) * T, N));
 
       // Cross-field heat conduction
       // kappa_perp = 2 * n * nu_ii * rho_i^2
@@ -87,7 +91,8 @@ void ClassicalDiffusion::transform(Options &state) {
       // TODO: Figure out what to do with the below
       if(custom_D < 0) {
         const Field3D nu = floor(GET_VALUE(Field3D, species["collision_frequency"]), 1e-10);
-        add(species["energy_source"], FV::Div_a_Grad_perp(2. * floor(P, 1e-5) * nu * AA / Bsq, T));
+        // add(species["energy_source"], FV::Div_a_Grad_perp(2. * floor(P, 1e-5) * nu * AA / Bsq, T));
+        add(species["energy_source"], Div_a_Grad_perp_nonorthog(2. * floor(P, 1e-5) * nu * AA / Bsq, T));
       }
     }
   }
