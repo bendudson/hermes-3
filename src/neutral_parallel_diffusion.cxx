@@ -105,20 +105,25 @@ void NeutralParallelDiffusion::transform(Options& state) {
     add(species["energy_source"], E);
 
     Field3D F = 0.0;
-    if (IS_SET(species["velocity"]) and viscosity) {
-      // Relationship between heat conduction and viscosity for neutral
-      // gas Chapman, Cowling "The Mathematical Theory of Non-Uniform
-      // Gases", CUP 1952 Ferziger, Kaper "Mathematical Theory of
-      // Transport Processes in Gases", 1972
-      //
-
-      Field3D Vn = GET_VALUE(Field3D, species["velocity"]);
+    if (IS_SET(species["velocity"])) {
       Field3D NVn = GET_VALUE(Field3D, species["momentum"]);
 
-      Field3D eta_n = (2. / 5) * kappa_n;
+      // Momentum advection
+      F = FV::Div_par_K_Grad_par(NVn * Dn, logPn);
 
-      // Momentum diffusion
-      F = FV::Div_par_K_Grad_par(NVn * Dn, logPn) + FV::Div_par_K_Grad_par(eta_n, Vn);
+      if (viscosity) {
+        // Momentum diffusion
+        // Relationship between heat conduction and viscosity for neutral
+        // gas Chapman, Cowling "The Mathematical Theory of Non-Uniform
+        // Gases", CUP 1952 Ferziger, Kaper "Mathematical Theory of
+        // Transport Processes in Gases", 1972
+
+        Field3D Vn = GET_VALUE(Field3D, species["velocity"]);
+        Field3D eta_n = (2. / 5) * kappa_n;
+
+        F += FV::Div_par_K_Grad_par(eta_n, Vn);
+      }
+
       add(species["momentum_source"], F);
     }
 
