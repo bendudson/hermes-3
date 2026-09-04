@@ -82,9 +82,13 @@ struct ComponentInformation {
   std::string name;
   std::string type;
 
-  ComponentInformation(const std::string& name_, const std::string& type_) : name(name_), type(type_) {}
+  ComponentInformation() {};
 
-  ComponentInformation(std::string&& name_, std::string&& type_) : name(std::move(name_)), type(std::move(type_)) {}
+  ComponentInformation(const std::string& name_, const std::string& type_)
+      : name(name_), type(type_) {}
+
+  ComponentInformation(std::string&& name_, std::string&& type_)
+      : name(std::move(name_)), type(std::move(type_)) {}
 
   bool operator<(const ComponentInformation& other) const {
     return std::pair(name, type) < std::pair(other.name, other.type);
