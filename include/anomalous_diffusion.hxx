@@ -40,7 +40,7 @@ private:
 
   bool anomalous_sheath_flux; ///< Allow anomalous diffusion into sheath?
 
-  std::shared_ptr<FCI::dagp_fv> dagp_op; ///< Perp. diffusion operator for Fci
+  std::shared_ptr<FV::Div_a_Grad_perp_FCI> dagp_op; ///< Perp. diffusion operator for Fci
 
   /// Inputs
   /// - species

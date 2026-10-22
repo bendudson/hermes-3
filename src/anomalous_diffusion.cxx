@@ -63,7 +63,7 @@ AnomalousDiffusion::AnomalousDiffusion(std::string name, Options& alloptions, So
                  .withDefault<bool>(false);
   // Only create the operator when Fci, otherwise other operators are used
   if (anomalous_nu.isFci()) {
-    dagp_op = FCI::getDagp_fv(mesh, rho_s0);
+    dagp_op = FV::Div_a_Grad_perp_FCI::create(mesh, rho_s0);
   }
 
   substitutePermissions("name", {name});
