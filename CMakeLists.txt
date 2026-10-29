@@ -389,6 +389,7 @@ if(HERMES_TESTS)
   hermes_add_integrated_test(sod-shock-energy CONFLICTS BOUT_USE_METRIC_3D)
   hermes_add_integrated_test(drift-wave CONFLICTS BOUT_USE_METRIC_3D)
   hermes_add_integrated_test(alfven-wave CONFLICTS BOUT_USE_METRIC_3D)
+  hermes_add_integrated_test(adpative-source CONFLICTS BOUT_USE_METRIC_3D)
   hermes_add_integrated_test(collfreq-braginskii-afn CONFLICTS
                              BOUT_USE_METRIC_3D)
   hermes_add_integrated_test(collfreq-multispecies CONFLICTS BOUT_USE_METRIC_3D)
