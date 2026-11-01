@@ -525,7 +525,8 @@ Field3D RelaxPotential::calculateDivJdia(Field3DParallel& phi,
       if (diamagnetic_polarisation) {
         add(species["energy_source"], P * DivJdia_species);
       }
-      subtract(species["energy_source"], P * 2.0 * bracket(logB, phi) * bracket_factor);
+      subtract(species["energy_source"],
+               P * 2.0 * bracket(logB, phi, BRACKET_ARAKAWA) * bracket_factor);
     }
     return DivJdia;
   }
