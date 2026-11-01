@@ -20,7 +20,7 @@ def gridname(ny):
 nylist = [16, 32]
 
 nout = 20
-timestep = 1e6 / nout
+timestep = 1e5 / nout
 
 nproc = 1
 

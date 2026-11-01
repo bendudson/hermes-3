@@ -38,8 +38,7 @@ def div_a_grad_perp(a, b):
 
 
 # Define solution in terms of input x,y,z
-phi1 = 0.35 * sin(2.0 * pi * x) * sin(2 * z + 1.321312)
-Vort = 1e-4 * sin(2.0 * pi * x) * sin(2 * z - 2.521312)
+phi1 = 5.35 * sin(2.0 * pi * x) * sin(2 * z + 1.321312)
 
 B = (1.0 + 0.1 * sin(2.0 * pi * x)) / Bnorm
 
@@ -48,7 +47,7 @@ T = 1.0 + 0.0 * x
 AA = 1.0
 Z = 1.0
 
-viscosity = (1.0 + 0.0 * x) / (rho_s * rho_s * Omega_ci)
+viscosity = (100.0 + 0.0 * x) / (rho_s * rho_s * Omega_ci)
 
 lam1 = 3e8 / lamnorm
 lam2 = 1.0
@@ -59,7 +58,6 @@ replace = [(x, metric.x), (z, metric.z * 2.0 * pi)]
 # Replace the variables with the new metric
 
 phi1 = phi1.subs(replace)
-Vort = Vort.subs(replace)
 
 B = B.subs(replace)
 
@@ -75,6 +73,13 @@ P = n * T
 permittivity = e0 / ((qe * qe) * Nnorm / Mp / (Omega_ci * Omega_ci))
 diamag = 0.0
 logB = log(B)
+
+Vort = (
+    div_a_grad_perp(permittivity, phi)
+    + div_a_grad_perp(AA * n / (B * B), phi)
+    + diamag * div_a_grad_perp(AA / (B * Z), P)
+)
+
 ##############################
 # Calculate time derivatives
 
