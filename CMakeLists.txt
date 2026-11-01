@@ -412,6 +412,8 @@ if(HERMES_TESTS)
                              BOUT_ENABLE_METRIC_3D)
   hermes_add_integrated_test(2D-relax-viscosity-fci REQUIRES
                              BOUT_ENABLE_METRIC_3D)
+  hermes_add_integrated_test(2D-relax-diamagnetic-fci REQUIRES
+                             BOUT_ENABLE_METRIC_3D)
   hermes_add_integrated_test(1D-relax-parviscosity-fci REQUIRES
                              BOUT_ENABLE_METRIC_3D)
   hermes_add_integrated_test(1D-relax-parcurrent-fci REQUIRES

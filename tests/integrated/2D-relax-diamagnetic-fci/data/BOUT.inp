@@ -1,0 +1,52 @@
+nout = 50
+timestep = 0.1
+
+
+[mesh]
+
+extrapolate_y = false
+
+[mesh:paralleltransform]
+type = fci
+
+
+[solver]
+mxstep = 10000
+rtol = 1e-6
+atol = 1e-12
+mms = true  # Run with MMS sources and output diagnostics
+mms_initialise = true
+[hermes]
+components = h+, relax_potential
+
+
+Nnorm = 1e18
+Bnorm = 1
+Tnorm = 5
+
+[relax_potential]
+exb_advection = false
+diamagnetic = true
+vort_dissipation = false
+phi_dissipation = false
+viscosity = 1.0
+boussinesq = false
+diamagnetic_polarisation = false
+
+[h+]  # Ions
+type = fixed_density, fixed_temperature
+charge = 1.0
+AA = 1.0
+
+density = 2.0e+17*sin(6.28318530717959*x)*sin(2.0*z + 4.7) + 1.0e+18
+temperature = 5.0000000000000
+
+
+[Vort]
+solution = 0.0001*sin(6.28318530717959*x)*sin(2.0*z - 2.521312)
+source = 2.06053986328036e-10*sin(6.28318530717959*x)*sin(2.0*z - 2.521312) + 1.64857263679067e-7*sin(6.28318530717959*x)*cos(6.28318530717959*x)*cos(2.0*z + 4.7)/(0.1*sin(6.28318530717959*x) + 1.0)^2
+bndry_all = dirichlet(Vort:solution)
+[phi1]
+solution = 0.35*sin(6.28318530717959*x)*sin(2.0*z + 1.321312)
+source = 3.61883741309146e-7*(0.2*sin(6.28318530717959*x)*sin(2.0*z + 4.7) + 1.0)*sin(6.28318530717959*x)*sin(2.0*z + 1.321312)/(0.1*sin(6.28318530717959*x) + 1.0)^2 + 1.44753496523658e-8*(0.2*sin(6.28318530717959*x)*sin(2.0*z + 4.7) + 1.0)*sin(2.0*z + 1.321312)*cos(6.28318530717959*x)^2/(0.1*sin(6.28318530717959*x) + 1.0)^3 + 1.003489708392e-5*sin(6.28318530717959*x)*sin(2.0*z - 2.521312) + 1.915826291475e-9*sin(6.28318530717959*x)*sin(2.0*z + 1.321312) - 5.79013986094633e-8*sin(6.28318530717959*x)^2*cos(2.0*z + 1.321312)*cos(2.0*z + 4.7)/(0.1*sin(6.28318530717959*x) + 1.0)^2 - 1.44753496523658e-8*sin(2.0*z + 1.321312)*sin(2.0*z + 4.7)*cos(6.28318530717959*x)^2/(0.1*sin(6.28318530717959*x) + 1.0)^2
+bndry_all = dirichlet(phi1:solution)
