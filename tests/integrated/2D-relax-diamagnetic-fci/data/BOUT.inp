@@ -32,7 +32,7 @@ phi_dissipation = false
 viscosity = 100.0
 boussinesq = false
 diamagnetic_polarisation = false
-
+lambda_1 = 3e10
 [h+]  # Ions
 type = fixed_density, fixed_temperature
 charge = 1.0
