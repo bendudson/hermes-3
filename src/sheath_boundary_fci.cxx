@@ -306,8 +306,8 @@ void SheathBoundaryFci::transform_impl(GuardedOptions& state) {
     pnt.next(Ve) = 2.0 * vesheath - pnt.current(Ve);
     pnt.next(NVe) = 2.0 * Me * nesheath * vesheath - pnt.current(NVe);
 
-    if (abs(pnt.offset())
-        == 1) { // Only subtract flux when the cell is actually in direct contact with the sheath
+    // Only subtract flux when the cell is actually in direct contact with the sheath
+    if (abs(pnt.offset()) == 1) {
 
       BoutReal q = gamma_e * tesheath * nesheath * vesheath;
 
