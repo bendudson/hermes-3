@@ -52,6 +52,13 @@ BoutReal limitFree(BoutReal fm, BoutReal fc, int mode) {
 
   return fp;
 }
+template <class T>
+BoutReal limitFree(T point, const Field3D& f, int mode) {
+  if (point.valid() < 1) {
+    return limitFree(point.current(f), point.current(f), mode);
+  }
+  return limitFree(point.prev(f), point.current(f), mode);
+}
 
 } // namespace
 
@@ -220,12 +227,9 @@ void SheathBoundaryFci::transform_impl(GuardedOptions& state) {
                                : zeroFrom(Ni);
 
       mesh->getCoordinates()->getYBoundary().iter([&](auto& pnt) {
-        const BoutReal Ni_im =
-            limitFree(pnt.prev(Ni), pnt.current(Ni), density_boundary_mode);
-        const BoutReal Ti_im =
-            limitFree(pnt.prev(Ti), pnt.current(Ti), temperature_boundary_mode);
-        const BoutReal Te_im =
-            limitFree(pnt.prev(Te), pnt.current(Te), temperature_boundary_mode);
+        const BoutReal Ni_im = limitFree(pnt, Ni, density_boundary_mode);
+        const BoutReal Ti_im = limitFree(pnt, Ti, temperature_boundary_mode);
+        const BoutReal Te_im = limitFree(pnt, Te, temperature_boundary_mode);
 
         const BoutReal nisheath = 0.5 * (Ni_im + pnt.current(Ni));
         const BoutReal tesheath =
@@ -253,10 +257,8 @@ void SheathBoundaryFci::transform_impl(GuardedOptions& state) {
     mesh->getCoordinates()->getYBoundary().iter([&](auto& pnt) {
       const auto& i = pnt.ind();
 
-      const BoutReal Ne_im =
-          limitFree(pnt.prev(Ne), pnt.current(Ne), density_boundary_mode);
-      const BoutReal Te_im =
-          limitFree(pnt.prev(Te), pnt.current(Te), temperature_boundary_mode);
+      const BoutReal Ne_im = limitFree(pnt, Ne, density_boundary_mode);
+      const BoutReal Te_im = limitFree(pnt, Te, temperature_boundary_mode);
 
       const BoutReal nesheath = 0.5 * (Ne_im + pnt.current(Ne));
       const BoutReal tesheath = floor(0.5 * (Te_im + pnt.current(Te)), 1e-5);
@@ -288,9 +290,9 @@ void SheathBoundaryFci::transform_impl(GuardedOptions& state) {
   mesh->getCoordinates()->getYBoundary().iter([&](auto& pnt) {
     const auto& i = pnt.ind();
 
-    pnt.next(Ne) = limitFree(pnt.prev(Ne), pnt.current(Ne), density_boundary_mode);
-    pnt.next(Te) = limitFree(pnt.prev(Te), pnt.current(Te), temperature_boundary_mode);
-    pnt.next(Pe) = limitFree(pnt.prev(Pe), pnt.current(Pe), pressure_boundary_mode);
+    pnt.next(Ne) = limitFree(pnt, Ne, density_boundary_mode);
+    pnt.next(Te) = limitFree(pnt, Te, temperature_boundary_mode);
+    pnt.next(Pe) = limitFree(pnt, Pe, pressure_boundary_mode);
 
     pnt.next(phi) = do_phi_extrapolation ? (2.0 * pnt.current(phi) - pnt.prev(phi))
                                          : pnt.current(phi);
@@ -400,9 +402,9 @@ void SheathBoundaryFci::transform_impl(GuardedOptions& state) {
       // This ensures that the guard cell values remain positive
       // exp( 2*log(N[i]) - log(N[ip]) )
 
-      pnt.next(Ni) = limitFree(pnt.prev(Ni), pnt.current(Ni), density_boundary_mode);
-      pnt.next(Ti) = limitFree(pnt.prev(Ti), pnt.current(Ti), temperature_boundary_mode);
-      pnt.next(Pi) = limitFree(pnt.prev(Pi), pnt.current(Pi), pressure_boundary_mode);
+      pnt.next(Ni) = limitFree(pnt, Ni, density_boundary_mode);
+      pnt.next(Ti) = limitFree(pnt, Ti, temperature_boundary_mode);
+      pnt.next(Pi) = limitFree(pnt, Pi, pressure_boundary_mode);
 
       // Calculate sheath values at half-way points (cell edge)
       const BoutReal nisheath = 0.5 * (pnt.current(Ni) + pnt.next(Ni));
