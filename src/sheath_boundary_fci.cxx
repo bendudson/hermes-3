@@ -174,11 +174,11 @@ void SheathBoundaryFci::transform_impl(GuardedOptions& state) {
   // This is for applying boundary conditions
   Field3DParallel Ve = IS_SET_NOBOUNDARY(electrons["velocity"])
                            ? getNoBoundary<Field3D>(electrons["velocity"])
-                           : zeroFrom(Ne);
+                           : zeroFrom<Field3DParallel>(Ne);
 
   Field3DParallel NVe = IS_SET_NOBOUNDARY(electrons["momentum"])
                             ? getNoBoundary<Field3D>(electrons["momentum"])
-                            : zeroFrom(Ne);
+                            : zeroFrom<Field3DParallel>(Ne);
 
   ASSERT2(Ne.hasParallelSlices());
   ASSERT2(Te.hasParallelSlices());
@@ -382,7 +382,7 @@ void SheathBoundaryFci::transform_impl(GuardedOptions& state) {
                              : zeroFrom(Ni);
     Field3DParallel NVi = species.isSet("momentum")
                               ? getNoBoundary<Field3D>(species["momentum"])
-                              : Mi * Ni * Vi;
+                              : Field3DParallel{Mi * Ni * Vi};
 
     // Energy source will be modified in the domain
     Field3D energy_source = species.isSet("energy_source")
