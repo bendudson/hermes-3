@@ -22,7 +22,7 @@ namespace {
 /// Mode 1: always exponential extrapolation
 /// Mode 2: always linear extrapolation
 
-BoutReal limitFree(BoutReal fm, BoutReal fc, BoutReal mode) {
+BoutReal limitFree(BoutReal fm, BoutReal fc, int mode) {
   if ((fm < fc) && (mode == 0)) {
     return fc; // Neumann rather than increasing into boundary
   }
@@ -122,17 +122,17 @@ SheathBoundaryFci::SheathBoundaryFci(std::string name, Options& alloptions, Solv
   density_boundary_mode =
       options["density_boundary_mode"]
           .doc("BC mode: 0=LimitFree, 1=ExponentialFree, 2=LinearFree")
-          .withDefault<BoutReal>(1);
+          .withDefault<int>(1);
 
   pressure_boundary_mode =
       options["pressure_boundary_mode"]
           .doc("BC mode: 0=LimitFree, 1=ExponentialFree, 2=LinearFree")
-          .withDefault<BoutReal>(1);
+          .withDefault<int>(1);
 
   temperature_boundary_mode =
       options["temperature_boundary_mode"]
           .doc("BC mode: 0=LimitFree, 1=ExponentialFree, 2=LinearFree")
-          .withDefault<BoutReal>(1);
+          .withDefault<int>(1);
 
   diagnose = options["diagnose"]
                  .doc("Save additional output diagnostics")
