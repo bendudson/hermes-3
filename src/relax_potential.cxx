@@ -523,7 +523,12 @@ Field3D RelaxPotential::calculateDivJdia(Field3DParallel& phi,
       DivJdia += DivJdia_species;
       // Balance of this term in the species energy equation
       if (diamagnetic_polarisation) {
-        add(species["energy_source"], P * DivJdia_species);
+        if (boussinesq) {
+          add(species["energy_source"], P * DivJdia_species);
+        } else {
+          auto T = GET_NOBOUNDARY(Field3D, species["temperature"]);
+          add(species["energy_source"], T * DivJdia_species);
+        }
       }
       subtract(species["energy_source"],
                P * 2.0 * bracket(logB, phi, BRACKET_ARAKAWA) * bracket_factor);
