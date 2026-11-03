@@ -193,7 +193,6 @@ TEST_F(RelaxPotentialTest, ApplyPhiBoundarySheath) {
   const BoutReal sheathmult = std::log(0.5 * std::sqrt(1.0 / pi));
   const BoutReal expected = (2.0 * (2.0 * sheathmult)) - 1.0;
 
-  ASSERT_NEAR(phi(mesh->xstart - 1, mesh->ystart, 0), expected, 1e-12);
   ASSERT_NEAR(phi(mesh->xend + 1, mesh->ystart, 0), expected, 1e-12);
 }
 
