@@ -455,46 +455,32 @@ void RelaxPotential::applyPhiBoundary(Field3DParallel& phi, GuardedOptions state
 
   // Set boundary in Fci when sheath boundary
   // Keep default FA behavior the same
-  if ((mesh->lastX() && sheath_boundary) || (mesh->lastX() && !mesh->isFci())) {
-    for (int j = mesh->ystart; j <= mesh->yend; j++) {
-      BoutReal teavg = 0.0;
-      for (int k = 0; k < mesh->LocalNz; k++) {
-        teavg += Te(mesh->xend, j, k);
-      }
-      teavg /= mesh->LocalNz;
-      const BoutReal phivalue = sheathmult * teavg;
-      for (int k = 0; k < mesh->LocalNz; k++) {
-        phi(mesh->xend + 1, j, k) = (2. * phivalue) - phi(mesh->xend, j, k);
-      }
-      if (mesh->xend < mesh->LocalNx - 2) {
+  if (mesh->lastX() && sheath_boundary) {
+    if (mesh->isFci()) {
+      for (int j = mesh->ystart; j <= mesh->yend; j++) {
         for (int k = 0; k < mesh->LocalNz; k++) {
+          // Dont average in Fci, set them for each cell based on the boundary temperture
+          const BoutReal phivalue =
+              sheathmult * 0.5 * (Te(mesh->xend, j, k) + Te(mesh->xend + 1, j, k));
+          phi(mesh->xend + 1, j, k) = (2. * phivalue) - phi(mesh->xend, j, k);
           phi(mesh->xend + 2, j, k) = phi(mesh->xend + 1, j, k);
         }
       }
-    }
-  }
-
-  // FirstX is the inner boundary, which sets the core potential as dirichlet
-  // Keep default FA behavior the same
-
-  if (mesh->isFci()) {
-    return;
-  }
-
-  if (mesh->firstX()) {
-    for (int j = mesh->ystart; j <= mesh->yend; j++) {
-      BoutReal teavg = 0.0;
-      for (int k = 0; k < mesh->LocalNz; k++) {
-        teavg += Te(mesh->xstart, j, k);
-      }
-      teavg /= mesh->LocalNz;
-      const BoutReal phivalue = sheathmult * teavg;
-      for (int k = 0; k < mesh->LocalNz; k++) {
-        phi(mesh->xstart - 1, j, k) = (2. * phivalue) - phi(mesh->xstart, j, k);
-      }
-      if (mesh->xstart > 1) {
+    } else { // Old behavior for FA
+      for (int j = mesh->ystart; j <= mesh->yend; j++) {
+        BoutReal teavg = 0.0;
         for (int k = 0; k < mesh->LocalNz; k++) {
-          phi(mesh->xstart - 2, j, k) = phi(mesh->xstart - 1, j, k);
+          teavg += Te(mesh->xend, j, k);
+        }
+        teavg /= mesh->LocalNz;
+        const BoutReal phivalue = sheathmult * teavg;
+        for (int k = 0; k < mesh->LocalNz; k++) {
+          phi(mesh->xend + 1, j, k) = (2. * phivalue) - phi(mesh->xend, j, k);
+        }
+        if (mesh->xend < mesh->LocalNx - 2) {
+          for (int k = 0; k < mesh->LocalNz; k++) {
+            phi(mesh->xend + 2, j, k) = phi(mesh->xend + 1, j, k);
+          }
         }
       }
     }
@@ -524,8 +510,10 @@ Field3D RelaxPotential::calculateDivJdia(Field3DParallel& phi,
       // Balance of this term in the species energy equation
       if (diamagnetic_polarisation) {
         if (boussinesq) {
+          // Prefactor is P / N_0
           add(species["energy_source"], P * DivJdia_species);
         } else {
+          // Nonboussinesq should be P / N = T
           auto T = GET_NOBOUNDARY(Field3D, species["temperature"]);
           add(species["energy_source"], T * DivJdia_species);
         }
@@ -830,8 +818,12 @@ void RelaxPotential::transform_impl(GuardedOptions& state) {
 
   phi = phi1 / lambda_2;
 
-  Pi_hat = calculatePihat(allspecies);
+  // Recommunicate phi to take into account the boundaries for the interpolation
   applyPhiBoundary(phi, state);
+  mesh->communicate(phi);
+  applyParallelNeumannBoundary(phi);
+
+  Pi_hat = calculatePihat(allspecies);
 
   this->Vort_from_phi = vorticity(phi, allspecies);
   if (!evolve_vorticity) {
