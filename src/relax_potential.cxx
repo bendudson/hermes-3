@@ -252,7 +252,6 @@ RelaxPotential::RelaxPotential(std::string name, Options& alloptions, Solver* so
     if (diamagnetic_bracketform) {
       // Calculate logB
       logB = log(coord->Bxy());
-      ASSERT0(logB.hasParallelSlices());
     } else {
       // Read curvature vector
       try {
@@ -297,7 +296,6 @@ RelaxPotential::RelaxPotential(std::string name, Options& alloptions, Solver* so
   }
 
   Bsq = SQ(coord->Bxy());
-  ASSERT0(Bsq.hasParallelSlices());
 
   diagnose =
       options["diagnose"].doc("Output additional diagnostics?").withDefault<bool>(false);
@@ -699,11 +697,9 @@ Field3D RelaxPotential::calculateParallelCurrentSource(const Options& state) {
     }
 
     const Field3DParallel NV = get<Field3D>(species["momentum"]);
-    ASSERT2(NV.hasParallelSlices());
     ensure_initialised(NV);
     const BoutReal A = get<BoutReal>(species["AA"]);
     const Field3DParallel jpar = (Z / A) * NV;
-    ASSERT2(jpar.hasParallelSlices());
     result += Div_par(jpar);
 
     if (state["fields"].isSet("Apar_flutter")) {
