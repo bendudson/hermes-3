@@ -93,10 +93,10 @@ private:
   BoutReal hyper_z;   ///< Hyper-diffusion
   BoutReal hyper_z_T; ///< 4th-order dissipation in T
 
-  BoutReal
-      adaptive_source; ///< Adaptive source that keeps the temperature around this value
-  BoutReal
-      adaptive_overshoot; ///< Temperature above adaptive_source in which the source are turned off
+  /// Adaptive source that keeps the temperature around this value
+  BoutReal adaptive_source;
+  /// Temperature above adaptive_source in which the source are turned off
+  BoutReal adaptive_overshoot;
 
   bool diagnose;                 ///< Output additional diagnostics?
   bool enable_precon;            ///< Enable preconditioner?
