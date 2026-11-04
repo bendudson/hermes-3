@@ -13,8 +13,8 @@ t0 = time()
 
 gen_data = False
 verbose = True
-rtol = 2e-5
-atol = 5e-7
+rtol = 2e-8
+atol = 5e-10
 
 ## Setup
 this_dir = Path(__file__).parent
