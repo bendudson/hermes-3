@@ -16,8 +16,8 @@ Tnorm = 100
 
 nproc = 1
 
-density_targets = [1e19, 2e19, 2.5e19, 3e19]
-temperature_targets = [50, 75, 100, 125]
+density_targets = [1e19, 2e19]
+temperature_targets = [50, 75]
 d_overshoot = 1e18
 t_overshoot = 2.0
 
