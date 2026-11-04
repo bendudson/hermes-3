@@ -56,6 +56,12 @@ private:
   bool upper_y; // Boundary on upper y?
 
   bool always_set_phi; ///< Set phi field?
+  /// Width of the smooth Bohm condition, as a fraction of C_i (0 = sharp max(C_i, |V|))
+  BoutReal bohm_smoothing;
+  /// Ion velocity at the lower (negative, into the sheath) and upper (positive) sheath
+  /// entrance from the sound speed C_i and the end-cell velocity V
+  BoutReal lowerSheathVelocity(BoutReal C_i, BoutReal V) const;
+  BoutReal upperSheathVelocity(BoutReal C_i, BoutReal V) const;
 
   Field3D wall_potential; ///< Voltage at the wall. Normalised units.
 
