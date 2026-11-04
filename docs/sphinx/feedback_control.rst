@@ -388,7 +388,7 @@ The overshoot is an approximate interval after which the source is completely da
 
 The function used for the dampening is
 
-.. code-block:: ini
+.. code-block: c++
 
    Field3D adaptive_sourceterm(const Field3D& thisfield, const BoutReal maximum,
                                const BoutReal overshoot) {
