@@ -13,7 +13,7 @@ from boututils.run_wrapper import launch_safe, shell
 from numpy import abs, array, log, max, mean, polyfit, sqrt
 
 # Grid resolutions (nx, ny, nz). Must be the same as in mms.py
-resolutions = [(20, 4, 32), (36, 8, 64), (68, 16, 128)]
+resolutions = [(20, 4, 32), (36, 8, 64)]
 
 
 def gridname(nx, ny, nz):
