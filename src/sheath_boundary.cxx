@@ -57,9 +57,6 @@ BoutReal limitFree(BoutReal fm, BoutReal fc) {
   return fp;
 }
 
-} // namespace
-
-namespace {
 /// Smooth maximum of the sound speed C_i and the end-cell speed u towards the wall,
 /// (C_i + u + sqrt((C_i - u)^2 + w^2)) / 2 with w = smoothing C_i; never below max(C_i, u)
 BoutReal bohmSpeed(BoutReal C_i, BoutReal u, BoutReal smoothing) {
