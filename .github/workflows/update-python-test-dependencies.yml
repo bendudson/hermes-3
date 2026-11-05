@@ -24,7 +24,7 @@ jobs:
           python3 ci/update_pinned_packages.py
 
       - name: Create pull request
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@v8
         with:
           branch: ci/update-python-test-dependencies
           commit-message: Update Python test dependency SHAs
