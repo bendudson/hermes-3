@@ -111,7 +111,7 @@ jobs:
                  libparpack2-dev
                  libhypre-dev
 
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           submodules: true
 
