@@ -121,7 +121,7 @@ EvolveDensity::EvolveDensity(std::string name, Options& alloptions, Solver* solv
   adaptive_overshoot = n_options["adaptive_overshoot"]
                            .doc("Density [m^-3] interval in which the source term is "
                                 "dampened when adaptive_source > 0.")
-                           .withDefault<BoutReal>(1e18)
+                           .withDefault<BoutReal>(2e18)
                        / Nnorm;
 
   source_normalisation = Nnorm * Omega_ci;
