@@ -287,6 +287,32 @@ TEST_F(RelaxPotentialTest, CalculateParallelCurrentSourceIncludesDivJextra) {
   ASSERT_TRUE(IsFieldEqual(source, 1.25, "RGN_NOBNDRY"));
 }
 
+/// Check the species parallel current reaches the vorticity source, not only DivJextra
+TEST_F(RelaxPotentialTest, CalculateParallelCurrentSourceIncludesSpeciesCurrent) {
+  FakeSolver solver;
+  Options options = baseOptions();
+
+  RelaxPotential component("test", options, &solver);
+
+  Field3D NV{0.0, mesh};
+  for (int i = 0; i < mesh->LocalNx; i++) {
+    for (int j = 0; j < mesh->LocalNy; j++) {
+      for (int k = 0; k < mesh->LocalNz; k++) {
+        NV(i, j, k) = 0.1 * j * j; // varies along y, so Div_par isn't zero
+      }
+    }
+  }
+  // fields has to be there (it always is in a run, phi lives in it)
+  const Options state{
+      {"fields", {{"DivJextra", 1.25}}},
+      {"species", {{"d+", {{"charge", 1.0}, {"AA", 2.0}, {"momentum", NV}}}}}};
+  const Field3D source = component.calculateParallelCurrentSource(state);
+
+  const Field3D div_jpar = Div_par(Field3D{0.5 * NV}); // jpar = (Z / A) NV
+  ASSERT_GT(max(abs(div_jpar), false, "RGN_NOBNDRY"), 0.0);
+  ASSERT_TRUE(IsFieldEqual(source, Field3D{1.25 + div_jpar}, "RGN_NOBNDRY"));
+}
+
 /// Check that in evolving-vorticity mode `calculatePhi1Source()` depends only on
 /// `vort_from_phi - vort`, and is therefore independent of the supplied `vort_rhs`.
 TEST_F(RelaxPotentialTest, CalculatePhi1SourceEvolveVorticityUsesVortDifference) {

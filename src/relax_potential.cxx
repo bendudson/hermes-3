@@ -680,7 +680,7 @@ Field3D RelaxPotential::calculateParallelCurrentSource(const Options& state) {
     result += DivJextra;
   }
 
-  if (!state.isSet("species")) {
+  if (!state.isSection("species")) {
     return result;
   }
 
